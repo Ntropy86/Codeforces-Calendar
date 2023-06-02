@@ -1,5 +1,3 @@
-
-
 const usernameElement = document.getElementById("userName");
 const usernameButton = document.getElementById("userNameBtn");
 const userData = {}
@@ -16,15 +14,11 @@ const recordUsername = async()=>{
   usernameButton.removeEventListener('click', recordUsername);
   await conditionalRender();
 }
-
 const generateAlgorithm = async(userName)=>{
   console.log("Lolva Algo",userName);
 }
-
 // usernameButton.addEventListener('click', recordUsername);
-
 const codeForcesInfo = async(userData)=>{
-
   const userName = JSON.parse(userData).username;
   // console.info(`INFO: Fetched User Data: ${userName}`);
   const url = `https://codeforces.com/api/user.info?handles=${userName}`
@@ -44,8 +38,6 @@ const codeForcesInfo = async(userData)=>{
   console.log("SUCCESS: userInfo", userInfo);
   return userInfo;
   }
-
-  
 
 const problems = async(userRating)=>{
   try {
@@ -68,7 +60,6 @@ const problems = async(userRating)=>{
     console.error(`${error}`);
     throw new Error(error);
   }
-  
 }
 
  async function getURL(url) {
@@ -86,17 +77,13 @@ const problems = async(userRating)=>{
         reject(new Error("Request failed"));
       }
     };
-
     xhr.onerror = function () {
       // Connection error
       reject(new Error("Connection error"));
     };
-
     xhr.send();
   });
 }
-
-
 
 const sequence = async()=>{
   try {
@@ -120,8 +107,6 @@ const sequence = async()=>{
   catch(err){
       console.error(`${err}`);
   }
-  
-
 }
 
 const main = ()=>{
