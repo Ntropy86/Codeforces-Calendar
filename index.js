@@ -24,7 +24,8 @@ const generateAlgorithm = async(userName)=>{
 usernameButton.addEventListener('click', recordUsername);
 
 const codeForcesInfo = async(userName)=>{
-  console.log(`INFO: Fetched User Data: ${userName}`);
+  try{
+    console.info(`INFO: Fetched User Data: ${userName}`);
   const url = `https://codeforces.com/api/user.info?handles=${userName}`
   const calllback = (err, data) => {
     if (err) {
@@ -35,23 +36,39 @@ const codeForcesInfo = async(userName)=>{
     }
   }
   const userInfo = await getURL(url, calllback);
+  if(userInfo==null||userInfo==undefined||userInfo.length==0){
+    console.error(`ERROR: User ${userName} not found`);
+    throw new Error(`ERROR: User ${userName} not found`);
+  }
   console.log("SUCCESS: userInfo", userInfo);
   return userInfo;
+  }
+  catch(err){
+    console.error(`ERROR: ${err}`);
+    throw new Error(err);
+  }
+  
 }
 
 const problems = async()=>{
-  const url ='https://codeforces.com/api/problemset.problems'
+  try {
+    const url ='https://codeforces.com/api/problemset.problems'
   const calllback = (err, data) => {
     if (err) {
-        console.log(err);
+        console.error(err);
     } else {
         const filteredData = data.result.problems.filter((item) => { return item.rating > 1500})
-        console.log("filteredData", filteredData);
+        console.info("INFO: filteredData", filteredData);
         return filteredData;
     }
   }
   const filteredProblems = await getURL(url, calllback);
   return filteredProblems;
+  } catch (error) {
+    console.error(`ERROR: ${error}`);
+    throw new Error(error);
+  }
+  
 }
 
 async function getURL(url, callback) {
@@ -78,20 +95,24 @@ async function getURL(url, callback) {
 }
 
 
-usernameButton.addEventListener('click', sequence);
-try{}
-catch(err){
-  console.log(err);
-}
-
 const sequence = async()=>{
-  await recordUsername();
+  try{
+    await recordUsername();
   const userName = localStorage.getItem('userData');
   generateAlgorithm(userName);
   const userInfo = await codeForcesInfo(userName);
-  console.log(`INFO: User Info: ${userInfo}`);
+  console.info(`INFO: User Info: ${userInfo}`);
+  }
+catch(err){
+  console.error(`ERROR: ${err}`);
+}
+  
   // const filteredProblems = await problems();
   // console.log(`INFO: Filtered Problems: ${filteredProblems}`);
 }
 
-sequence();
+usernameButton.addEventListener('click', sequence);
+
+
+
+
