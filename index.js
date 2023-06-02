@@ -2,6 +2,21 @@ const usernameElement = document.getElementById("userName");
 const usernameButton = document.getElementById("userNameBtn");
 const userData = {}
 
+
+// const getProblemURL = async () => {
+//     let currDate = new Date();
+//     currDate = currDate.toISOString() 
+//     const check = localStorage.getItem("problemData");
+//     const problemData = JSON.parse(check); // Parse the string into an array
+//     currDate =  currDate.substring(0, currDate.indexOf("T"));
+//     const filteredProblems = problemData.filter(problem => {
+//       const problemDate = problem.date.substring(0, problem.date.indexOf("T"));
+//       return problemDate === currDate;
+//     });
+  
+//     const url = `https://codeforces.com/problems/${filteredProblems[0].problem.contestId}/${filteredProblems[0].problem.index}`;
+//     return url;
+//   };
 const conditionalRender = async()=>{
   usernameButton.innerHTML = "Success!";
   // usernameButton.remove()
@@ -53,7 +68,7 @@ const problems = async(userRating)=>{
     }
   }
   const allProblemsRes = await getURL(url, calllback);
-  const filteredProblems = await allProblemsRes.result.problems.filter((item) => { return item.rating >= userRating; });
+  const filteredProblems = await allProblemsRes.result.problems.filter((item) => { return item.rating === userRating; });
   console.info(`INFO: filteredData-> Problems with Rating >= ${userRating} `, filteredProblems);
   return filteredProblems;
   } catch (error) {
@@ -98,6 +113,19 @@ const sequence = async()=>{
       const userRating = userInfo.result[0].rating;
       console.info("INFO: userRating", userRating);
       const filteredProblems = await problems(userRating);
+
+      const currentDate = new Date();
+      const problemData = filteredProblems.map((problem, index) => {
+        const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), index + 1);
+        return{
+            date : date.toISOString(), 
+            problem: problem,
+            url:`https://codeforces.com/problemset/problem/${problem.contestId}/${problem.index}`
+        } 
+      });
+  
+      localStorage.setItem('problemData', JSON.stringify(problemData));
+      console.info('INFO: Problem data stored in local storage.');
       // console.log('INFO: Filtered Problems:', filteredProblems);
 
       //Now Based on the Algorithm, Classify and  Either: 
@@ -115,7 +143,3 @@ const main = ()=>{
 }
 
 document.addEventListener('DOMContentLoaded', main )
-
-
-
-
