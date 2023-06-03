@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    /* CSS for the calendar */
+    .calendar {
+      width: 300px;
+      border: 1px solid #ccc;
+      padding: 10px;
+    }
+    .calendar th {
+      background-color: #f2f2f2;
+    }
+    .calendar td {
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="ProblemOfTheDay"></div>
+
+  <script>
+    // Function to create the calendar
+    function createCalendar() {
+      // Get the current date
+      var currentDate = new Date();
+      
+      var slicedDate = currentDate.toISOString();
+      slicedDate = slicedDate.substring(0, slicedDate.indexOf("T"));
+       
+      var currentYear = currentDate.getFullYear();
+      var currentMonth = currentDate.getMonth();
+      var jugaadMonth = parseInt(currentMonth) + 1;
+
+      // Array of month names
+      var monthNames = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+      ];
+
+      // Create the calendar HTML
+      var calendarHTML = '<table class="calendar">';
+      calendarHTML += '<tr><th colspan="7">' + monthNames[currentMonth] + ' ' + currentYear + '</th></tr>';
+      calendarHTML += '<tr><th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th></tr>';
+
+      // Get the first day of the month
+      var firstDay = new Date(currentYear, currentMonth, 1);
+      var startingDay = firstDay.getDay();
+
+      // Get the number of days in the month
+      var daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+      // Create the calendar days
+      var day = 1;
+      for (var i = 0; i < 6; i++) {
+        calendarHTML += '<tr>';
+        for (var j = 0; j < 7; j++) {
+          if (i === 0 && j < startingDay) {
+            calendarHTML += '<td></td>';
+          } else if (day > daysInMonth) {
+            break;
+          } else {
+            
+            var formattedMonth = jugaadMonth.toString().padStart(2, '0');
+            var formattedDay = day.toString().padStart(2, '0');
+
+            // Create the ISO formatted date
+            var isoDate = currentYear + '-' + formattedMonth + '-' + formattedDay;
+
+            //    console.log(isoDate);
+           
+
+                const check = localStorage.getItem("problemData");
+                const problemData = JSON.parse(check); // Parse the string into an array
+                const filteredProblems = problemData.filter(problem => {
+                  const problemDate = problem.date.substring(0, problem.date.indexOf("T"));
+                  return problemDate == isoDate;
+                });
+
+                const url = filteredProblems[0].url;
+
+            calendarHTML += `<td> <a href = ${url}>` + day + '</a>' + '</td>';
+            day++;
+          }
+        }
+        calendarHTML += '</tr>';
+        if (day > daysInMonth) {
+          break;
+        }
+      }
+
+      calendarHTML += '</table>';
+
+      // Append the calendar HTML to the div
+      document.getElementById("ProblemOfTheDay").innerHTML = calendarHTML;
+    }
+
+    // Call the createCalendar function to generate the calendar
+    createCalendar();
+  </script>
+</body>
+</html>

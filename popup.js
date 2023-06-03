@@ -2,21 +2,6 @@ const usernameElement = document.getElementById("userName");
 const usernameButton = document.getElementById("userNameBtn");
 const userData = {}
 
-
-// const getProblemURL = async () => {
-//     let currDate = new Date();
-//     currDate = currDate.toISOString() 
-//     const check = localStorage.getItem("problemData");
-//     const problemData = JSON.parse(check); // Parse the string into an array
-//     currDate =  currDate.substring(0, currDate.indexOf("T"));
-//     const filteredProblems = problemData.filter(problem => {
-//       const problemDate = problem.date.substring(0, problem.date.indexOf("T"));
-//       return problemDate === currDate;
-//     });
-  
-//     const url = `https://codeforces.com/problems/${filteredProblems[0].problem.contestId}/${filteredProblems[0].problem.index}`;
-//     return url;
-//   };
 const conditionalRender = async()=>{
   usernameButton.innerHTML = "Success!";
   // usernameButton.remove()
@@ -32,7 +17,6 @@ const recordUsername = async()=>{
 const generateAlgorithm = async(userName)=>{
   console.log("Lolva Algo",userName);
 }
-// usernameButton.addEventListener('click', recordUsername);
 const codeForcesInfo = async(userData)=>{
   const userName = JSON.parse(userData).username;
   // console.info(`INFO: Fetched User Data: ${userName}`);
@@ -126,11 +110,6 @@ const sequence = async()=>{
   
       localStorage.setItem('problemData', JSON.stringify(problemData));
       console.info('INFO: Problem data stored in local storage.');
-      // console.log('INFO: Filtered Problems:', filteredProblems);
-
-      //Now Based on the Algorithm, Classify and  Either: 
-        // Store the problems in Localstorage
-        // Or, Make the GenAlgo Function in a way that we can get results from it
   }
   catch(err){
       console.error(`${err}`);
@@ -138,8 +117,14 @@ const sequence = async()=>{
 }
 
 const main = ()=>{
-  console.info("INFO: DOM Loaded");
-  usernameButton.addEventListener('click', sequence);
+  // console.info("INFO: DOM Loaded");
+  try{
+    usernameButton.addEventListener('click', sequence);
+  }
+  catch(err){
+    console.error(`${err}`);
+  }
+ 
 }
 
 document.addEventListener('DOMContentLoaded', main )
