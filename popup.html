@@ -1,16 +1,45 @@
+<!-- popup.html -->
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Codeforces Calendar</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f3f3f3;
+      padding: 20px;
+    }
+
+    h1 {
+      text-align: center;
+    }
+
+    input {
+      margin-bottom: 10px;
+      width: 100%;
+      padding: 5px;
+      font-size: 14px;
+    }
+
+    button {
+      display: block;
+      margin: 0 auto;
+      padding: 10px 20px;
+      background-color: #4caf50;
+      color: #fff;
+      font-size: 14px;
+      border: none;
+      cursor: pointer;
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <input type="text" id="userName" placeholder = 'CF Username'></input>
-        <button id="userNameBtn" >Generate Babay!</button>    
-    </div>
-    <script src="./popup.js"></script>
+  <h1>Codeforces Calendar</h1>
+  <input id="userName" type="text" placeholder="Enter your Codeforces username">
+  <button id="userNameBtn">Submit</button>
+  <script src="popup.js"></script>
 </body>
 </html>
