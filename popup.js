@@ -1,5 +1,3 @@
-// popup.js
-
 const usernameElement = document.getElementById("userName");
 const usernameButton = document.getElementById("userNameBtn");
 
@@ -46,70 +44,32 @@ const generateAlgorithm = async (userName) => {
 const codeForcesInfo = async (userData) => {
   console.info(`INFO: Fetched User Data: ${userData}`);
   const url = `https://codeforces.com/api/user.info?handles=${userData}`;
-  const calllback = async (err, data) => {
-    if (err) {
-      console.log(err);
-    } else {
-      console.log("BKAAA", data);
-      return data;
-    }
-  };
-  const userInfo = await getURL(url, calllback);
-  if (userInfo == null || userInfo == undefined || userInfo.length == 0) {
-    console.error(`ERROR: User ${userName} not found`);
-    throw new Error(`User ${userName} not found`);
+  const userInfo = await fetch(url).then((response) => response.json());
+  if (userInfo.result.length === 0) {
+    console.error(`ERROR: User ${userData} not found`);
+    throw new Error(`User ${userData} not found`);
   }
-  console.log("SUCCESS: userInfo", userInfo);
+  console.log("SUCCESS: userInfo", userInfo.result);
   return userInfo.result;
 };
 
 const problems = async (userRating) => {
   try {
-    offset = 200;
+    const offset = 200;
     userRating = Math.ceil(userRating / 100) * 100 + offset;
     console.info("INFO: userRating With Offset", userRating);
     const url = "https://codeforces.com/api/problemset.problems";
-    const calllback = async (err, data) => {
-      if (err) {
-        console.error(err);
-      } else {
-        return data;
-      }
-    };
-    const allProblemsRes = await getURL(url, calllback);
-    const filteredProblems = await allProblemsRes.result.problems.filter((item) => {
+    const allProblemsRes = await fetch(url).then((response) => response.json());
+    const filteredProblems = allProblemsRes.result.problems.filter((item) => {
       return item.rating === userRating;
     });
-    console.info(`INFO: filteredData-> Problems with Rating >= ${userRating} `, filteredProblems);
+    console.info(`INFO: filteredData -> Problems with Rating >= ${userRating}`, filteredProblems);
     return filteredProblems;
   } catch (error) {
     console.error(`${error}`);
     throw new Error(error);
   }
 };
-
-async function getURL(url) {
-  return new Promise((resolve, reject) => {
-    var xhr = new XMLHttpRequest();
-    xhr.open("GET", url, true);
-
-    xhr.onload = function () {
-      if (xhr.status >= 200 && xhr.status < 400) {
-        // Request successful
-        var response = JSON.parse(xhr.responseText);
-        resolve(response);
-      } else {
-        // Request failed
-        reject(new Error("Request failed"));
-      }
-    };
-    xhr.onerror = function () {
-      // Connection error
-      reject(new Error("Connection error"));
-    };
-    xhr.send();
-  });
-}
 
 const sequence = async () => {
   try {
@@ -141,7 +101,7 @@ const sequence = async () => {
     storeData("problemData", problemData);
     console.info("INFO: Problem data stored in local storage.");
 
-    // Send a message to the background script to inject the calendar HTML
+    // Send a message to the background script to inject calendar HTML
     chrome.runtime.sendMessage({ action: "injectCalendarHTML" });
   } catch (err) {
     console.error(`${err}`);
