@@ -4,10 +4,11 @@
     "version": "1.0",
     "permissions": [
       "tabs",
-      "storage"
+      "storage",
+      "scripting"
     ],
     "host_permissions": [
-      "https://codeforces.com/*"
+      "<all_urls>"
     ],
     "action": {
       "default_popup": "popup.html"
