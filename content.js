@@ -1,6 +1,4 @@
 function createCalendar() {
-  // Get the current date
- // alert("working....\n");
   var currentDate = new Date();
 
   var slicedDate = currentDate.toISOString();
@@ -83,6 +81,8 @@ function createCalendar() {
     if (sidebar) {
       // sidebar.innerHTML = calendarHTML;
       sidebar.insertAdjacentHTML("afterbegin", calendarHTML);
+      reloadPageOnce();
+      //location.reload(); //added
     } else {
       console.error("ERROR: Could not find the sidebar element on Codeforces homepage.");
     }
@@ -92,3 +92,7 @@ function createCalendar() {
 console.log("checkkkkkkkkk");
 
 createCalendar();
+
+
+//--------------------------------------------testing---------------------------------
+

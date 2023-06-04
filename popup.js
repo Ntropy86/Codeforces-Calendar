@@ -22,6 +22,7 @@ const getData = async (key) => {
 
 const conditionalRender = async () => {
   usernameButton.innerHTML = "Success!";
+ // location.reload();
 };
 
 const recordUsername = async () => {
@@ -35,6 +36,9 @@ const recordUsername = async () => {
   await storeData("userData", userData);
   usernameButton.removeEventListener("click", recordUsername);
   await conditionalRender();
+
+
+ // location.reload();  //added
 };
 
 const generateAlgorithm = async (userName) => {
@@ -103,6 +107,7 @@ const sequence = async () => {
 
     // Send a message to the background script to inject calendar HTML
     chrome.runtime.sendMessage({ action: "injectCalendarHTML" });
+   // location.reload();
   } catch (err) {
     console.error(`${err}`);
   }
@@ -117,3 +122,5 @@ const main = () => {
 };
 
 document.addEventListener("DOMContentLoaded", main);
+
+

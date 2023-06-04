@@ -11,14 +11,34 @@
       padding: 20px;
     }
 
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background-color: #fff;
+      padding: 20px;
+      border-radius: 5px;
+      box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+    }
+
     h1 {
       text-align: center;
-      color: #4caf50;
+      color: #3d6edd;
+      margin-bottom: 30px;
+    }
+
+    .input-group {
       margin-bottom: 20px;
     }
 
-    input {
-      margin-bottom: 10px;
+    .input-group label {
+      display: block;
+      font-size: 14px;
+      font-weight: bold;
+      color: #333;
+      margin-bottom: 5px;
+    }
+
+    .input-group input {
       width: 100%;
       padding: 10px;
       font-size: 14px;
@@ -26,11 +46,16 @@
       border-radius: 5px;
     }
 
-    button {
-      display: block;
-      margin: 0 auto;
+    .button-group {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .button-group button {
+      display: inline-block;
+      margin: 0 5px;
       padding: 10px 20px;
-      background-color: #4caf50;
+      background-color: #3d6edd;
       color: #fff;
       font-size: 14px;
       border: none;
@@ -39,15 +64,67 @@
       transition: background-color 0.3s ease;
     }
 
-    button:hover {
-      background-color: #45a049;
+    .button-group button:hover {
+      background-color: #2a4d8a;
+    }
+
+    .calendar-container {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .calendar {
+      border-collapse: collapse;
+      width: 100%;
+    }
+
+    .calendar th {
+      text-align: center;
+      padding: 10px;
+      background-color: #3d6edd;
+      font-weight: bold;
+      color: #fff;
+    }
+
+    .calendar td {
+      text-align: center;
+      padding: 10px;
+      border: 1px solid #ccc;
+      background-color: #fff;
+      color: #333;
+    }
+
+    .calendar td a {
+      color: #3d6edd;
+      text-decoration: none;
+    }
+
+    .calendar td a:hover {
+      text-decoration: underline;
+    }
+
+    .calendar td.available {
+      background-color: #3d6edd;
+      color: #fff;
     }
   </style>
 </head>
 <body>
-  <h1>Codeforces Calendar</h1>
-  <input id="userName" type="text" placeholder="Enter your Codeforces username">
-  <button id="userNameBtn">Submit</button>
+  <div class="container">
+    <h1>Codeforces Calendar</h1>
+    <div class="input-group">
+      <label for="userName">Enter your Codeforces username:</label>
+      <input id="userName" type="text" placeholder="Username">
+    </div>
+    <div class="button-group">
+      <button id="userNameBtn">Generate Calendar</button>
+      <button id="reloadBtn" style="display: none;">Reload Page</button>
+    </div>
+    <div class="calendar-container" id="calendarContainer" style="display: none;">
+      <table class="calendar" id="calendar"></table>
+    </div>
+  </div>
   <script src="popup.js"></script>
 </body>
 </html>
+
