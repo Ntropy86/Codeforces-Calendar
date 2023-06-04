@@ -75,24 +75,29 @@ function createCalendar() {
 
     calendarHTML += '</table>';
 
-    // Append the calendar HTML to the div with id "sidebar"
-    var sidebar = document.getElementById("sidebar");
-    //console.log(sidebar);
-    if (sidebar) {
-      // sidebar.innerHTML = calendarHTML;
-      sidebar.insertAdjacentHTML("afterbegin", calendarHTML);
-      reloadPageOnce();
-      //location.reload(); //added
+  var sidebar = document.getElementById("sidebar");
+
+  if (sidebar) {
+    sidebar.insertAdjacentHTML("afterbegin", calendarHTML);
+
+    // Check if this is the first load after the calendar is injected.
+    if (!sessionStorage.getItem('reloaded')) {
+      // Set the 'reloaded' flag.
+      sessionStorage.setItem('reloaded', 'true');
+
+      // After injecting the calendar HTML, refresh the page.
+      window.location.reload();
     } else {
-      console.error("ERROR: Could not find the sidebar element on Codeforces homepage.");
+      // Remove the 'reloaded' flag.
+      sessionStorage.removeItem('reloaded');
     }
-  });
+  } else {
+    console.error("ERROR: Could not find the sidebar element on Codeforces homepage.");
+  }
+});
+
 }
 
 console.log("checkkkkkkkkk");
 
 createCalendar();
-
-
-//--------------------------------------------testing---------------------------------
-

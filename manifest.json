@@ -8,7 +8,7 @@
       "scripting"
     ],
     "host_permissions": [
-      "https://codeforces.com/"
+      "https://codeforces.com/*"
     ],
     "action": {
       "default_popup": "popup.html"
@@ -23,7 +23,7 @@
     },
     "content_scripts": [
       {
-        "matches": ["https://codeforces.com/"],
+        "matches": ["https://codeforces.com/*"],
         "js": ["content.js"],
         "css": ["style.css"]
       }
