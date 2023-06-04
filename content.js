@@ -1,10 +1,11 @@
 function createCalendar() {
   // Get the current date
-  alert("working....\n");
+ // alert("working....\n");
   var currentDate = new Date();
 
   var slicedDate = currentDate.toISOString();
   slicedDate = slicedDate.substring(0, slicedDate.indexOf("T"));
+  console.log(slicedDate);
 
   var currentYear = currentDate.getFullYear();
   var currentMonth = currentDate.getMonth();
@@ -17,7 +18,7 @@ function createCalendar() {
   ];
 
   // Create the calendar HTML
-  var calendarHTML = '<table class="calendar">';
+  var calendarHTML = '<table style = "width :100%" class="calendar">';
   calendarHTML += '<tr><th colspan="7">' + monthNames[currentMonth] + ' ' + currentYear + '</th></tr>';
   calendarHTML += '<tr><th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th></tr>';
 
@@ -32,6 +33,7 @@ function createCalendar() {
   var day = 1;
   var isoDate;
   var url;
+  var referenceDate = new Date().getDate();
 
   // Retrieve data from chrome.storage.local
   chrome.storage.local.get("problemData", function (result) {
@@ -50,6 +52,7 @@ function createCalendar() {
 
           // Create the ISO formatted date
           isoDate = currentYear + '-' + formattedMonth + '-' + formattedDay;
+       //   console.log(isoDate);
 
           if (problemData) {
             var filteredProblems = problemData.filter(function (problem) {
@@ -62,7 +65,7 @@ function createCalendar() {
             }
           }
 
-          calendarHTML += '<td>' + (url ? '<a href="' + url + '">' + day + '</a>' : day) + '</td>';
+          calendarHTML += '<td>' + (url && referenceDate >= day ? '<a href="' + url + '">' + day + '</a>' : day) + '</td>';
           day++;
         }
       }
@@ -76,9 +79,10 @@ function createCalendar() {
 
     // Append the calendar HTML to the div with id "sidebar"
     var sidebar = document.getElementById("sidebar");
-    console.log(sidebar);
+    //console.log(sidebar);
     if (sidebar) {
-      sidebar.innerHTML = calendarHTML;
+      // sidebar.innerHTML = calendarHTML;
+      sidebar.insertAdjacentHTML("afterbegin", calendarHTML);
     } else {
       console.error("ERROR: Could not find the sidebar element on Codeforces homepage.");
     }
@@ -87,13 +91,4 @@ function createCalendar() {
 
 console.log("checkkkkkkkkk");
 
-// // Listen for messages from the popup script and background script
-// chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
-//   console.log("Received message:", message);
-
-//   if (message.action === "injectCalendarHTML") {
-//     createCalendar();
-//   }
-//   // You can add more message handling logic here if needed
-// });
 createCalendar();

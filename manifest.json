@@ -7,9 +7,6 @@
       "storage",
       "scripting"
     ],
-    "host_permissions": [
-      "<all_urls>"
-    ],
     "action": {
       "default_popup": "popup.html"
     },
@@ -23,8 +20,9 @@
     },
     "content_scripts": [
       {
-        "matches": ["https://codeforces.com/*"],
-        "js": ["content.js"]
+        "matches": ["https://codeforces.com/"],
+        "js": ["content.js"],
+        "css":["style.css"]
       }
     ]
   }
