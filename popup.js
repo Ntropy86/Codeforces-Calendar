@@ -80,7 +80,7 @@ const sequence = async () => {
     await recordUsername();
     const userName = await getData("userData");
     console.log("INFO: User Name", userName);
-    generateAlgorithm(userName.username);
+   // generateAlgorithm(userName.username);
     const userInfoResponse = await codeForcesInfo(userName.username);
     storeData("userInfo", userInfoResponse);
     const userInfo = await getData("userInfo");

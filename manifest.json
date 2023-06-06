@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "Code-O-Clock",
-    "description":" This Extension Gives you a New Codeforces problem to solve each day acording to your rating and challenges you. Got what it takes? Then Hop in to the challenge!",
+    "description":"This Extension Gives you a New CF problem to solve each day according to your rating and challenges you. Got what it takes?",
     "version": "1.1",
     "permissions": [
       "tabs",
