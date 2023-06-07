@@ -9,7 +9,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
         return tab.active;
       });
       console.log(need);
-     // chrome.runtime.sendMessage({ action: "reload and generate" }); //added
+     
       chrome.scripting.executeScript({
         target: { tabId: need[0].id },
         files: ["content.js"],

@@ -4,7 +4,6 @@
     "description":"This Extension Gives you a New CF problem to solve each day according to your rating and challenges you. Got what it takes?",
     "version": "1.1",
     "permissions": [
-      "tabs",
       "storage",
       "scripting"
     ],
