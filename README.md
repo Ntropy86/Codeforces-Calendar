@@ -156,6 +156,8 @@ Distributed under the MIT License. See `LICENSE.txt` for more information.
 ## Contact
 
 Nitigya Kargeti - [@Ntropy86](https://twitter.com/Ntropy86) 
+
+
 Anant Kumar Srivastava - [@the_anantkumar](https://twitter.com/the_anantKumar) 
 
 
@@ -168,6 +170,8 @@ Project Link: [CalCode](https://github.com/Ntropy86/CF)
 ## Acknowledgments
 
 -   [Ntropy](https://github.com/Ntropy86)
+
+
 -   [the_anantkumar](https://github.com/the_anantkumar)
 
 <p align="right">(<a href="#top">back to top</a>)</p>
