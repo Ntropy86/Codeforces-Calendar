@@ -15,9 +15,17 @@ function createCalendar() {
     "July", "August", "September", "October", "November", "December"
   ];
 
+  // Retrieve data from chrome.storage.local
+  chrome.storage.local.get(["problemData", "userInfo"], function (result) {      
+  var problemData = result.problemData;
+  var userHandle = result.userInfo[0].handle;
   // Create the calendar HTML
   var calendarHTML = '<table style = "width :100%" class="calendar">';
   calendarHTML += '<tr><th colspan="7">' + monthNames[currentMonth] + ' ' + currentYear + '</th></tr>';
+  
+  
+    calendarHTML += '<tr><td colspan="7">Active user: ' + userHandle + '</td></tr>';
+  
   calendarHTML += '<tr><th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th></tr>';
 
   // Get the first day of the month
@@ -33,9 +41,6 @@ function createCalendar() {
   var url;
   var referenceDate = new Date().getDate();
 
-  // Retrieve data from chrome.storage.local
-  chrome.storage.local.get("problemData", function (result) {
-    var problemData = result.problemData;
 
     for (var i = 0; i < 6; i++) {
       calendarHTML += '<tr>';
@@ -76,21 +81,15 @@ function createCalendar() {
     calendarHTML += '</table>';
 
   var sidebar = document.getElementById("sidebar");
-
-  if (sidebar) {
+  var calendar = document.getElementsByClassName("calendar")[0];  //added
+  if(sidebar && calendar){
+    sidebar.removeChild(calendar);
     sidebar.insertAdjacentHTML("afterbegin", calendarHTML);
-
-    // Check if this is the first load after the calendar is injected.
-    if (!sessionStorage.getItem('reloaded')) {
-      // Set the 'reloaded' flag.
-      sessionStorage.setItem('reloaded', 'true');
-
-      // After injecting the calendar HTML, refresh the page.
-      window.location.reload();
-    } else {
-      // Remove the 'reloaded' flag.
-      sessionStorage.removeItem('reloaded');
-    }
+   // alert("Calendar updated successfully");
+  }
+  else if (sidebar) {
+    sidebar.insertAdjacentHTML("afterbegin", calendarHTML);
+    //alert("Calendar updated successfully");
   } else {
     console.error("ERROR: Could not find the sidebar element on Codeforces homepage.");
   }
