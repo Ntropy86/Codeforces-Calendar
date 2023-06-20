@@ -60,6 +60,12 @@ const codeForcesInfo = async (userData) => {
 const problems = async (userRating) => {
   try {
     const offset = 200;
+    console.info("INFO: userRating -->", userRating);
+    if(userRating == undefined)
+    {
+      userRating = 600;
+    }
+    console.info("INFO: userRatingAfterCheck--> ", userRating);
     userRating = Math.ceil(userRating / 100) * 100 + offset;
     console.info("INFO: userRating With Offset", userRating);
     const url = "https://codeforces.com/api/problemset.problems";
