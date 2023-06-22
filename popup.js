@@ -107,7 +107,7 @@ const sequence = async () => {
         url: `https://codeforces.com/problemset/problem/${problem.contestId}/${problem.index}`,
       };
     });
-
+    storeData("userInfo", userInfo);
     storeData("problemData", problemData);
     console.info("INFO: Problem data stored in local storage.");
 
