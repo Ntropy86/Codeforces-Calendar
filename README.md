@@ -157,7 +157,7 @@ Distributed under the MIT License. See `LICENSE.txt` for more information.
 Nitigya Kargeti - [@Ntropy86](https://twitter.com/Ntropy86) 
 
 
-Anant Kumar Srivastava - [@the_anantkumar](https://twitter.com/the-anantKumar) 
+Anant Kumar Srivastava - [@the-anantkumar](https://www.linkedin.com/in/anant-kumar-srivastava-65223a5b/)
 
 
 Project Link: [CalCode](https://github.com/Ntropy86/CF)
