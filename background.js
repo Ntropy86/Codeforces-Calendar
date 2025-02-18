@@ -1,19 +1,21 @@
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
   if (request.action === "injectCalendarHTML") {
-    // location.reload();
     chrome.windows.getCurrent({ populate: true }, (window) => {
       const tabs = window.tabs;
-      console.log(tabs);
-      
-      const need = tabs.filter(tab =>{
-        return tab.active;
-      });
-      console.log(need);
-     
+      const activeTab = tabs.filter(tab => tab.active)[0];
+      console.log("Active tab:", activeTab);
+
+      // Inject content.js into the active tab.
       chrome.scripting.executeScript({
-        target: { tabId: need[0].id },
+        target: { tabId: activeTab.id },
         files: ["content.js"],
-      }); // Access the tabs here
+      });
+
+      // Inject style.css into the active tab.
+      chrome.scripting.insertCSS({
+        target: { tabId: activeTab.id },
+        files: ["style.css"],
+      });
     });
   }
 });
