@@ -177,13 +177,13 @@ const sequence = async () => {
 
     // Use stored streakData if present; otherwise, recalc for the month.
     chrome.storage.local.get(["streakData"], async (result) => {
-      if (result.streakData) {
-        console.log("Streak data already present. Using stored streak:", result.streakData.streak);
-        updateStreakUI(result.streakData.streak);
-      } else {
+      // if (result.streakData) {
+      //   console.log("Streak data already present. Using stored streak:", result.streakData.streak);
+      //   updateStreakUI(result.streakData.streak);
+      // } else {
         const currentStreak = await recalcMonthlyStreak(userInfo[0].handle, problemData);
         updateStreakUI(currentStreak);
-      }
+     // }
     });
     // Tell the background script to inject the calendar HTML into Codeforces
     chrome.runtime.sendMessage({ action: "injectCalendarHTML" });
