@@ -61,11 +61,11 @@
 
 .calendar td a:hover:after {
   transform: scaleX(1);
-}
+  }
 
 .calendar td a:hover {
   color: var(--primary-color);
-}
+  }
 
 .calendar td:hover {
   background-color: var(--accent-color);
