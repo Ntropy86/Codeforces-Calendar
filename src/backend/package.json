@@ -1,0 +1,37 @@
+{
+  "name": "codeforces-calendar",
+  "version": "2.0.0",
+  "description": "DB Added into the mix",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ntropy86/Codeforces-Calendar.git"
+  },
+  "keywords": [
+    "Codeforces",
+    "POTD",
+    "Extension",
+    "Backend",
+    "Node",
+    "Mongo",
+    "Poblems",
+    "Competitive",
+    "Programming"
+  ],
+  "author": "Neat, Disypher",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Ntropy86/Codeforces-Calendar/issues"
+  },
+  "homepage": "https://github.com/Ntropy86/Codeforces-Calendar#readme",
+  "dependencies": {
+    "body-parser": "^1.20.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "mongoose": "^8.10.1"
+  }
+}
