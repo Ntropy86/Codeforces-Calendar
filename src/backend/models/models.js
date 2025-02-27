@@ -33,8 +33,9 @@ exports.filteredProblemSetSchema = new mongoose.Schema({
 
 //User Schema
 exports.userSchema = new mongoose.Schema({
-	userID:String,
-	rank:Number,
+	
+    userID:String,
+	rating:Number,
 	streak : {
 		last_streak_date : Date,
 		last_streak_count : Number

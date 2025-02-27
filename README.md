@@ -61,6 +61,10 @@
 
 [![Product Name Screen Shot][product-screenshot]](https://example.com)
 
+# Codeforces Calendar
+
+This project aims to create a calendar for Codeforces contests. It fetches contest data from the Codeforces API and displays it in a calendar format.
+
 <p align="right">(<a href="#top">back to top</a>)</p>
 
 ### Built With
@@ -101,6 +105,26 @@ Please read the instructions Given below Carefully
 3. Contributing
   - In order to contribute Feel free to Raise a PR With a Suitable Title and Description of What You appended.
   - Please make sure that your changes do not break any of the existing Functionalities or break the extension altogether. 
+
+## Setup Instructions
+
+1. Clone the repository:
+    ```sh
+    git clone https://github.com/yourusername/Codeforces-Calendar.git
+    cd Codeforces-Calendar
+    ```
+
+2. Install dependencies:
+    ```sh
+    npm install
+    ```
+
+3. Run the application:
+    ```sh
+    npm start
+    ```
+
+4. Open your browser and navigate to `http://localhost:3000` to view the calendar.
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
