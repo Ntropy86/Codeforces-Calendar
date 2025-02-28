@@ -48,7 +48,7 @@ const createUser = async (req, res) => {
             
             if (user.length !== 0) {
                 console.log("User already exists", user);
-                return res.status(403).json({ "message": "User already exists", user });
+                return res.status(200).json({ "message": "User already exists", user });
             }
             
             const newUser = await userService.createUser(userID);
@@ -57,7 +57,7 @@ const createUser = async (req, res) => {
             res.status(200).json({ "message": newUser });
         } catch (error) {
             if (error.message === "User already exists") {
-                return res.status(403).json({ "message": error.message });
+                return res.status(200).json({ "message": error.message });
             }
             throw error;
         }

@@ -2,15 +2,33 @@
   --primary-color: #f9f9f9;
   --secondary-color: #84afffa8;
   --accent-color: #4192d9;
+  --accent-light: #b3d4fc;
+  --accent-dark: #1565c0;
+  --success-color: #4caf50;
+  --warning-color: #ff9800;
+  --error-color: #f44336;
+  --text-color: #333;
+  --text-light: #757575;
+  --border-radius: 8px;
+  --shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
 
+/* Calendar Container */
+.cf-potd-container {
+  padding: 10px;
+  margin: 20px 0;
+  background-color: #fff;
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow);
+}
+
+/* Calendar Table */
 .calendar {
-  width: 60%;
-  margin: 30px auto;
-  background-color: var(--primary-color);
-  border-radius: 8px;
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 2px;
+  font-family: 'Segoe UI', Arial, sans-serif;
   overflow: hidden;
-  box-shadow: 0 5px 15px rgba(255, 255, 255, 0.1);
   transform: scale(0.98);
   transition: all 0.2s ease-in-out;
 }
@@ -19,57 +37,253 @@
   transform: scale(1);
 }
 
-.calendar th,
+/* Calendar Header */
+.calendar-header th {
+  background-color: var(--accent-dark);
+  color: white;
+  padding: 12px;
+  font-size: 1.1em;
+  text-align: center;
+  border-radius: var(--border-radius) var(--border-radius) 0 0;
+}
+
+/* User Info Row */
+.user-info-row td {
+  padding: 8px;
+  background-color: var(--accent-light);
+  color: var(--text-color);
+}
+
+.user-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px;
+}
+
+.user-handle {
+  font-weight: bold;
+}
+
+/* Streak Container */
+.streak-container {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background-color: rgba(255, 255, 255, 0.5);
+  padding: 5px 10px;
+  border-radius: 20px;
+}
+
+.streak-flame {
+  color: #ff6d00;
+}
+
+.streak-count {
+  font-weight: bold;
+  color: #d32f2f;
+}
+
+.streak-label {
+  font-size: 0.8em;
+  color: var(--text-light);
+}
+
+/* Day Header */
+.day-header th {
+  background-color: var(--accent-color);
+  color: white;
+  padding: 8px;
+  text-align: center;
+}
+
+/* Calendar Days */
 .calendar td {
   text-align: center;
-  padding: 8px;
-  color: #93c4f5;
-  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
-}
-
-.calendar th {
-  background-color: #1a3954;
-}
-
-.calendar td {
+  padding: 10px;
   background-color: var(--primary-color);
-}
-
-.calendar td a {
-  color: var(--accent-color);
-  text-decoration: none;
-  padding: 5px;
-  display: inline-block;
+  border-radius: 4px;
   transition: all 0.3s ease;
   position: relative;
+}
+
+.calendar td:hover {
+  background-color: var(--accent-light);
+  transform: scale(1.05);
+  z-index: 1;
+}
+
+/* Day States */
+.calendar td.past {
+  background-color: #f5f5f5;
+}
+
+.calendar td.today {
+  background-color: #e3f2fd;
+  font-weight: bold;
+  box-shadow: 0 0 0 2px var(--accent-color);
+}
+
+.calendar td.future {
+  color: var(--text-light);
+}
+
+.calendar td.solved {
+  background-color: #e8f5e9;
+}
+
+.calendar td.solved .checkmark {
+  color: var(--success-color);
+  font-weight: bold;
+  margin-left: 2px;
+}
+
+/* Links */
+.calendar td a {
+  color: var(--accent-dark);
+  text-decoration: none;
+  padding: 2px 5px;
+  border-radius: 3px;
+  transition: all 0.2s ease;
+  display: inline-block;
+}
+
+.calendar td a:hover {
+  background-color: var(--accent-color);
+  color: white;
+}
+
+/* Status Message */
+.cf-potd-status {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  padding: 10px 15px;
+  background-color: rgba(33, 150, 243, 0.9);
+  color: white;
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow);
+  z-index: 9999;
+  transition: all 0.3s ease;
+}
+
+/* Popup Styles */
+.container {
+  width: 300px;
+  padding: 20px;
+  background-color: #fff;
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow);
+}
+
+h1 {
+  color: var(--accent-dark);
+  margin-bottom: 15px;
+  text-align: center;
+}
+
+.input-group {
+  margin-bottom: 15px;
+}
+
+.input-group input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: var(--border-radius);
+  font-size: 14px;
+}
+
+.button-group {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.button-group button {
+  flex: 1;
+  padding: 10px;
+  background-color: var(--accent-color);
+  color: white;
+  border: none;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.button-group button:hover {
+  background-color: var(--accent-dark);
+}
+
+.status-message {
+  margin-top: 10px;
+  padding: 8px;
+  border-radius: var(--border-radius);
+  text-align: center;
+}
+
+.error-message {
+  background-color: #ffebee;
+  color: var(--error-color);
+}
+
+.success-message {
+  background-color: #e8f5e9;
+  color: var(--success-color);
+}
+
+/* Streak UI in popup */
+#streakElement {
+  margin-top: 15px;
+}
+
+#streakElement .streak-container {
+  background-color: #f5f5f5;
+  border-radius: var(--border-radius);
+  padding: 10px 15px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#streakElement .streak-icon {
+  font-size: 24px;
+  margin-bottom: 5px;
+}
+
+#streakElement .streak-details {
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+#streakElement .streak-count {
+  font-size: 28px;
+  font-weight: bold;
+  color: #d32f2f;
+}
+
+#streakElement .streak-label {
+  font-size: 12px;
+  color: var(--text-light);
+}
+
+#streakElement .streak-progress {
+  width: 100%;
+  height: 6px;
+  background-color: #e0e0e0;
+  border-radius: 3px;
   overflow: hidden;
 }
 
-.calendar td a:after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
+#streakElement .progress-bar {
   height: 100%;
   background-color: var(--accent-color);
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform 0.3s ease;
-  z-index: -1;
+  border-radius: 3px;
+  transition: width 0.5s ease;
 }
 
-.calendar td a:hover:after {
-  transform: scaleX(1);
-  }
-
-.calendar td a:hover {
-  color: var(--primary-color);
-  }
-
-.calendar td:hover {
-  background-color: var(--accent-color);
-  color: var(--primary-color);
-  box-shadow: 0 0 5px rgba(0,0,0,0.2);
-  transform: scale(1.1);
+#streakElement .streak-message {
+  text-align: center;
+  color: var(--text-light);
+  padding: 10px;
 }
