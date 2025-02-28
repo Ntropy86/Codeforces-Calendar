@@ -19,7 +19,7 @@
     Making Sure you conquer the world. One Test Case at a Time xD
     <br />
     <br />
-    <a href="https://chromewebstore.google.com/detail/codeforces-potd/kdpcekneldcnkajbmabmfgdpcdjdmcfdr">Download Extension</a>
+    <a href="https://chromewebstore.google.com/detail/kdpcekneldcnkajbmabmfgdpcdjdmcfd?utm_source=item-share-cp">Download Extension</a>
     ·
     <a href="https://github.com/Ntropy86/Codeforces-Calendar/issues">Report Bug</a>
     ·
@@ -147,15 +147,15 @@ Project Link: [CodeForces POTD](https://github.com/Ntropy86/Codeforces-Calendar)
 <!-- MARKDOWN LINKS & IMAGES -->
 
 [contributors-shield]: https://img.shields.io/github/contributors/Ntropy86/CF.svg?style=for-the-badge
-[contributors-url]: https://github.com/Ntropy86/CF/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/Ntropy86/CF.svg?style=for-the-badge
-[forks-url]: https://github.com/Ntropy86/CF/network/members
-[stars-shield]: https://img.shields.io/github/stars/Ntropy86/CF.svg?style=for-the-badge
-[stars-url]: https://github.com/Ntropy86/CF/stargazers
-[issues-shield]: https://img.shields.io/github/issues/Ntropy86/CF.svg?style=for-the-badge
-[issues-url]: https://github.com/Ntropy86/CF/issues
-[license-shield]: https://img.shields.io/github/license/Ntropy86/CF.svg?style=for-the-badge
-[license-url]: https://github.com/Ntropy86/CF/blob/master/LICENSE.txt
+[contributors-url]: https://github.com/Ntropy86/Codeforces-Calendar/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/Ntropy86/Codeforces-Calendar.svg?style=for-the-badge
+[forks-url]: https://github.com/Ntropy86/Codeforces-Calendar/network/members
+[stars-shield]: https://img.shields.io/github/stars/Ntropy86/Codeforces-Calendar.svg?style=for-the-badge
+[stars-url]: https://github.com/Ntropy86/Codeforces-Calendar/stargazers
+[issues-shield]: https://img.shields.io/github/issues/Ntropy86/Codeforces-Calendar.svg?style=for-the-badge
+[issues-url]: https://github.com/Ntropy86/Codeforces-Calendar/issues
+[license-shield]: https://img.shields.io/github/license/Ntropy86/Codeforces-Calendar.svg?style=for-the-badge
+[license-url]: https://github.com/Ntropy86/Codeforces-Calendar/blob/master/LICENSE.txt
 [linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
 [linkedin-url]: https://linkedin.com/in/nitigyak
 [product-screenshot]: images/screenshot.png
