@@ -229,6 +229,161 @@ app.post("/problemset/all", async (req, res) => {
         res.status(500).json({"message": err.message || "Internal server error"});
     }
 });
+
+
+app.post("/problemset/filtered", async (req, res) => {
+    try {
+        const today = new Date();
+        const currentDay = today.getDate();
+        const currentMonth = today.getMonth();
+        const currentYear = today.getFullYear();
+		const offset = 200;
+        
+        console.log(`Running filtered problem set generation for date: ${today.toISOString().split('T')[0]}`);
+        
+        const ratingCategories = [
+            600, 800, 1000, 1200, 1300, 1400, 1500, 1600, 
+            1700, 1800, 1900, 2000, 2100, 2200, 2300, 2400, 
+            2500, 2600, 2700, 2800, 2900, 3000, 3100, 3200, 3300, 3400, 3500
+        ];
+        
+        let stats = {
+            date: today.toISOString().split('T')[0],
+            newProblemsAdded: 0,
+            noAvailableProblems: [],
+            resetRatings: [],
+            errors: []
+        };
+        
+        // If it's the first day of the month, clear the entire collection and start over
+        if (currentDay === 1) {
+            console.log("It's the first day of the month. Clearing all filtered problem sets and starting fresh.");
+            await FilteredProblemSet.deleteMany({});
+        }
+        
+        // Retrieve the existing filtered problem set or create a new one
+        let filteredProblemSet = await FilteredProblemSet.findOne({});
+        
+        if (!filteredProblemSet) {
+            console.log("No filtered problem set found. Creating a new one.");
+            filteredProblemSet = new FilteredProblemSet({
+                problems: new Map()
+            });
+        }
+        
+        // For each rating category, add problems for days that need to be populated
+        for (const rating of ratingCategories) {
+            try {
+				offset_rating = Math.ceil(rating / 100) * 100 + offset;
+                // Get the problems map if it exists, or create a new one
+                let problemsForRating = filteredProblemSet.problems.get(rating.toString()) || [];
+                
+                // Find the last day that has been populated for this rating
+                let lastPopulatedDay = 0;
+                
+                if (problemsForRating.length > 0) {
+                    // Find the maximum day in the existing problems
+                    lastPopulatedDay = Math.max(...problemsForRating.map(p => p.day));
+                }
+                
+                // Days that need to be populated (from last populated day + 1 to current day)
+                const daysToPopulate = [];
+                for (let day = lastPopulatedDay + 1; day <= currentDay; day++) {
+                    daysToPopulate.push(day);
+                }
+                
+                if (daysToPopulate.length === 0) {
+					console.log(`Rating ${rating}: No days to populate, Already Populated!`);
+                    // This rating is already up to date
+                    continue;
+                }
+                
+                console.log(`Rating ${rating}: Populating days ${daysToPopulate.join(', ')}`);
+                
+                let availableProblems = await GlobalProblemSet.find({
+                    problemRating: offset_rating,
+                    problemUsed: false
+                }).limit(daysToPopulate.length);
+                
+                // If not enough problems, reset problemUsed flag for this rating and try again
+                if (availableProblems.length < daysToPopulate.length) {
+                    console.log(`Not enough problems for rating ${rating}. Resetting problemUsed flags.`);
+                    
+                    // Reset all problems for this rating
+                    await GlobalProblemSet.updateMany(
+                        { problemRating: rating },
+                        { $set: { problemUsed: false } }
+                    );
+                    
+                    stats.resetRatings.push(rating);
+                    
+                    // Try again with the reset problems
+                    availableProblems = await GlobalProblemSet.find({
+                        problemRating: rating,
+                        problemUsed: false
+                    }).limit(daysToPopulate.length);
+                    
+                    // SUPER EDGE CASE: If still not enough problems, log the issue and continue to next rating
+                    if (availableProblems.length < daysToPopulate.length) {
+                        console.log(`Still not enough problems for rating ${rating} after reset. Available: ${availableProblems.length}, Needed: ${daysToPopulate.length}`);
+                        stats.noAvailableProblems.push({
+                            rating,
+                            available: availableProblems.length,
+                            needed: daysToPopulate.length
+                        });
+                        continue;
+                    }
+                }
+                
+				//Update the Global Problem Set for the added problems
+                // Assign problems to days and mark them as used
+                for (let i = 0; i < daysToPopulate.length; i++) {
+                    const day = daysToPopulate[i];
+                    const problem = availableProblems[i];
+                    
+                    // Add to filtered problem set
+                    problemsForRating.push({
+                        day,
+                        problemID: problem.problemID,
+                        problemURL: problem.problemURL
+                    });
+                    
+                    // Mark the problem as used in the global set
+                    await GlobalProblemSet.findByIdAndUpdate(
+                        problem._id,
+                        { $set: { problemUsed: true } }
+                    );
+                    
+                    stats.newProblemsAdded++;
+                }
+                
+                // Update the problems map for this rating
+                filteredProblemSet.problems.set(rating.toString(), problemsForRating);
+                
+            } catch (error) {
+                console.error(`Error processing rating ${rating}:`, error);
+                stats.errors.push({
+                    rating,
+                    error: error.message
+                });
+            }
+        }
+        
+        // Save the updated filtered problem set
+        await filteredProblemSet.save();
+        
+        res.status(200).json({
+            "message": "Filtered problem set updated successfully",
+            stats
+        });
+        
+    } catch (err) {
+        console.error("Error in /problemset/filtered endpoint:", err);
+        res.status(500).json({
+            "message": err.message || "Internal server error"
+        });
+    }
+});
 			
 
 
