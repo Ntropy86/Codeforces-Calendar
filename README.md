@@ -9,23 +9,21 @@
 <!-- PROJECT LOGO -->
 <br />
 <div align="center">
-  <a href="https://github.com/Ntropy86/CF">
+  <a href="https://github.com/Ntropy86/Codeforces-Calendar">
     <img src="./icon.png" alt="Logo" width="80" height="80">
   </a>
 
-<h3 align="center">CF CalCode</h3>
+<h3 align="center">Codeforces Calendar POTD Chrome Extension</h3>
 
   <p align="center">
     Making Sure you conquer the world. One Test Case at a Time xD
     <br />
-    <a href="https://github.com/Ntropy86/GymHelpr"><strong>Explore the docs »</strong></a>
     <br />
-    <br />
-    <a href="https://github.com/Ntropy86/GymHelpr">View Demo</a>
+    <a href="https://chromewebstore.google.com/detail/codeforces-potd/kdpcekneldcnkajbmabmfgdpcdjdmcfdr">Download Extension</a>
     ·
-    <a href="https://github.com/Ntropy86/GymHelpr/issues">Report Bug</a>
+    <a href="https://github.com/Ntropy86/Codeforces-Calendar/issues">Report Bug</a>
     ·
-    <a href="https://github.com/Ntropy86/GymHelpr/issues">Request Feature</a>
+    <a href="https://github.com/Ntropy86/Codeforces-Calendar/issues">Request Feature</a>
   </p>
 </div>
 
@@ -87,67 +85,15 @@ This project aims to create a calendar for Codeforces contests. It fetches conte
 
 Please read the instructions Given below Carefully 
 
+So There are two main Parts where you can contribute
+- The Frontend (The Chrome Extension)
+- The Backend (MongoDB + Express) [Backend Documentation](./Dev.md)
+
 ### Prerequisites
 
 - Make sure you are using a Browser running Chromium V108 and above
 
-### Installation
-0. Fork The Repo
-1. Clone the Forked repo
-    ```sh
-    git clone https://github.com/<YourGitHubUsername>/CF.git
-    ```
-2. Install The Extension From Extension Settings
-  - Open up your Chromium Based Browser and Click on Load Unpacked Extension
-  - Select the Folder With all the contents of the Repo
-  - Voila! You have Installed the Extension.
 
-3. Contributing
-  - In order to contribute Feel free to Raise a PR With a Suitable Title and Description of What You appended.
-  - Please make sure that your changes do not break any of the existing Functionalities or break the extension altogether. 
-
-## Setup Instructions
-
-1. Clone the repository:
-    ```sh
-    git clone https://github.com/yourusername/Codeforces-Calendar.git
-    cd Codeforces-Calendar
-    ```
-
-2. Install dependencies:
-    ```sh
-    npm install
-    ```
-
-3. Run the application:
-    ```sh
-    npm start
-    ```
-
-4. Open your browser and navigate to `http://localhost:3000` to view the calendar.
-
-<p align="right">(<a href="#top">back to top</a>)</p>
-
-<!-- USAGE EXAMPLES -->
-
-## Usage
-
-_For more examples, please refer to the [Documentation](https://example.com)_
-
-<p align="right">(<a href="#top">back to top</a>)</p>
-
-<!-- ROADMAP -->
-
-## Roadmap
-
--   [ ] Feature 1
--   [ ] Feature 2
--   [ ] Feature 3
-    -   [ ] Nested Feature
-
-See the [open issues](https://github.com/Ntropy86/GymHelpr/issues) for a full list of proposed features (and known issues).
-
-<p align="right">(<a href="#top">back to top</a>)</p>
 
 <!-- CONTRIBUTING -->
 
@@ -178,13 +124,13 @@ Distributed under the MIT License. See `LICENSE.txt` for more information.
 
 ## Contact
 
-Nitigya Kargeti - [@Ntropy86](https://twitter.com/Ntropy86) 
+Neat (Nitigya K) - [@Ntropy86](https://twitter.com/Ntropy86) 
 
 
-Anant Kumar Srivastava - [@the-anantkumar](https://www.linkedin.com/in/anant-kumar-srivastava-65223a5b/)
+Disypher (Anant Kumar Srivastava) - [@the-anantkumar](https://www.linkedin.com/in/anant-kumar-srivastava-65223a5b/)
 
 
-Project Link: [CalCode](https://github.com/Ntropy86/CF)
+Project Link: [CodeForces POTD](https://github.com/Ntropy86/Codeforces-Calendar)
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -192,15 +138,13 @@ Project Link: [CalCode](https://github.com/Ntropy86/CF)
 
 ## Acknowledgments
 
--   [Ntropy](https://github.com/Ntropy86)
+-   [Neat](https://github.com/Ntropy86)
 
-
--   [the_anantkumar](https://github.com/the-anantkumar)
+-   [disypher](https://github.com/the-anantkumar)
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
 <!-- MARKDOWN LINKS & IMAGES -->
-<!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
 
 [contributors-shield]: https://img.shields.io/github/contributors/Ntropy86/CF.svg?style=for-the-badge
 [contributors-url]: https://github.com/Ntropy86/CF/graphs/contributors

@@ -9,6 +9,15 @@ exports.globalProblemSetSchema = new mongoose.Schema({
 });
 
 exports.filteredProblemSetSchema = new mongoose.Schema({
+    // Add month and year to keep track of the period
+    month: {
+        type: Number,
+        required: true
+    },
+    year: {
+        type: Number,
+        required: true
+    },
     // "problems" is a Map with dynamic rating keys.
     // Each rating key maps to an array of problem objects.
     problems: {
