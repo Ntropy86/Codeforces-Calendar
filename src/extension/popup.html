@@ -90,7 +90,23 @@
       box-shadow: 0 0 10px rgba(42, 77, 138, 0.1);
     }
 
-    /* ... Rest of the CSS stays the same ... */
+    #streakElement {
+      margin-top: 15px;
+      text-align: center;
+      font-weight: bold;
+      color: #3d6edd;
+    }
+
+    .status-message {
+      margin-top: 10px;
+      text-align: center;
+      color: #666;
+      font-size: 0.9rem;
+    }
+
+    .error-message {
+      color: #e74c3c;
+    }
   </style>
 </head>
 <body>
@@ -103,10 +119,12 @@
       <button id="userNameBtn">Go!</button>
       <button id="reloadBtn" style="display: none;">Reload</button>
     </div>
-    <div class="calendar-container" id="calendarContainer" style="display: none;">
-      <table class="calendar" id="calendar"></table>
-    </div>
+    <div id="statusMessage" class="status-message"></div>
+    <div id="streakElement"></div>
   </div>
+  <!-- Load scripts in correct order -->
+  <script src="config.js"></script>
+  <script src="api.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

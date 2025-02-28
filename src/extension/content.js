@@ -1,54 +1,4 @@
-// Recalculate the current monthly streak by fetching the last 50 submissions and matching them against problemData
-async function recalcMonthlyStreak(userHandle, problemData) {
-  try {
-    const response = await fetch(`https://codeforces.com/api/user.status?handle=${userHandle}&count=50`);
-    const data = await response.json();
-    if (data.status !== "OK") {
-      console.error("recalcMonthlyStreak: Error fetching submissions", data);
-      return 0;
-    }
-    const submissions = data.result;
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth();
-
-    // Filter submissions to those made in the current month.
-    const monthSubmissions = submissions.filter(sub => {
-      const subDate = new Date(sub.creationTimeSeconds * 1000);
-      return subDate.getFullYear() === currentYear && subDate.getMonth() === currentMonth;
-    });
-
-    let streak = 0;
-    let day = new Date(now); // start from today
-    while (true) {
-      const isoDay = day.toISOString().split("T")[0];
-      // Find the problem scheduled for this day from stored problemData
-      const todaysProblem = problemData.find(p => p.date.split("T")[0] === isoDay);
-      if (!todaysProblem) break; // no problem scheduled means stop
-      // Check for an accepted submission matching this day’s POTD
-      const solved = monthSubmissions.some(sub => {
-        const subISO = new Date(sub.creationTimeSeconds * 1000).toISOString().split("T")[0];
-        return subISO === isoDay &&
-               sub.problem.contestId === todaysProblem.problem.contestId &&
-               sub.problem.index === todaysProblem.problem.index &&
-               sub.verdict === "OK";
-      });
-      if (solved) {
-        streak++;
-      } else {
-        break;
-      }
-      day.setDate(day.getDate() - 1);
-      if (day.getMonth() !== currentMonth) break;
-    }
-    return streak;
-  } catch (err) {
-    console.error("recalcMonthlyStreak error:", err);
-    return 0;
-  }
-}
-
-// Render the calendar with problem hyperlinks (only for past/current dates) and recalc the monthly streak on each render.
+// Render the calendar with problem hyperlinks
 function createCalendar() {
   console.log("createCalendar: Called");
   var currentDate = new Date();
@@ -64,17 +14,65 @@ function createCalendar() {
     "July", "August", "September", "October", "November", "December"
   ];
 
-  // Retrieve problemData and userInfo from storage; then recalc the streak.
-  chrome.storage.local.get(["problemData", "userInfo"], async function (result) {
+  // Retrieve all needed data from storage
+  chrome.storage.local.get(["problemData", "userInfo", "userData", "streakData"], async function (result) {
     console.log("createCalendar: Retrieved storage data", result);
+    
     var problemData = result.problemData || [];
-    var userHandle = (result.userInfo && result.userInfo[0].handle) || "Unknown";
-    var streak = await recalcMonthlyStreak(userHandle, problemData);
-    console.log("createCalendar: Calculated streak =", streak);
+    console.log("Problem data:", problemData);
+    
+    // Extract user handle from multiple possible sources
+    var userHandle = "Unknown";
+    var streakCount = 0;
+    
+    // Check userInfo first (backend data)
+    if (result.userInfo && result.userInfo.length > 0) {
+      const user = result.userInfo[0];
+      console.log("User info for calendar:", user);
+      
+      // Check for userID field first (backend format)
+      if (user.userID) {
+        userHandle = user.userID;
+        console.log("Using userID from userInfo:", userHandle);
+      }
+    }
+    
+    // If still Unknown, try userData (what the user entered)
+    if (userHandle === "Unknown" && result.userData && result.userData.username) {
+      userHandle = result.userData.username;
+      console.log("Using username from userData:", userHandle);
+    }
+    
+    // First check for streak in streakData (what we stored from popup)
+    if (result.streakData && typeof result.streakData.streak === 'number') {
+      streakCount = result.streakData.streak;
+      console.log("Using streak from streakData:", streakCount);
+    }
+    // Then try userInfo object
+    else if (result.userInfo && result.userInfo[0]) {
+      const user = result.userInfo[0];
+      
+      // Check if streak data is in streak object
+      if (user.streak && typeof user.streak.last_streak_count === 'number') {
+        streakCount = user.streak.last_streak_count;
+        console.log("Using streak from userInfo.streak.last_streak_count:", streakCount);
+      }
+      // Check if it's a string that needs parsing
+      else if (user.streak && user.streak.last_streak_count) {
+        streakCount = parseInt(user.streak.last_streak_count);
+        console.log("Using parsed streak from userInfo.streak.last_streak_count:", streakCount);
+      }
+    }
+    
+    console.log("Final handle for calendar:", userHandle);
+    console.log("Final streak for calendar:", streakCount);
+    
+    // Store the streak
+    chrome.storage.local.set({ streakData: { streak: streakCount, lastCalculated: currentDate.toISOString().split('T')[0] } });
 
     var calendarHTML = '<table style="width:100%" class="calendar">';
     calendarHTML += '<tr><th colspan="7">' + monthNames[currentMonth] + ' ' + currentYear + '</th></tr>';
-    calendarHTML += '<tr><td colspan="7">Active user: ' + userHandle + ' | Current Monthly Streak: <span id="calendar-streak">' + streak + '</span></td></tr>';
+    calendarHTML += '<tr><td colspan="7">Active user: ' + userHandle + ' | Current Monthly Streak: <span id="calendar-streak">' + streakCount + '</span></td></tr>';
     calendarHTML += '<tr><th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th></tr>';
 
     // Determine first day and number of days in the month
@@ -97,12 +95,14 @@ function createCalendar() {
           
           // Reset URL for this day.
           var url = "";
-          if (problemData) {
+          if (problemData && problemData.length > 0) {
             var filteredProblems = problemData.filter(function (problem) {
+              if (!problem || !problem.date) return false;
               var problemDate = problem.date.split("T")[0];
               return problemDate == isoDate;
             });
-            if (filteredProblems.length > 0) {
+            
+            if (filteredProblems.length > 0 && filteredProblems[0].url) {
               url = filteredProblems[0].url;
             }
           }
@@ -135,7 +135,7 @@ function createCalendar() {
   addSubmitListeners();
 }
 
-// Mark today's cell as solved by adding a check mark.
+// Mark today's cell as solved
 function markCalendarTick() {
   console.log("markCalendarTick: Marking today's cell as solved.");
   var todayISO = new Date().toISOString().split("T")[0];
@@ -151,7 +151,7 @@ function markCalendarTick() {
   });
 }
 
-// Update the streak UI in the calendar header.
+// Update the streak UI in the calendar
 function updateStreakUI(streak) {
   console.log("updateStreakUI: Updating streak UI to", streak);
   var streakElem = document.getElementById("calendar-streak");
@@ -162,7 +162,7 @@ function updateStreakUI(streak) {
   }
 }
 
-// Attach event listeners to elements with the class "submit" using try/catch.
+// Attach event listeners to submit buttons
 function addSubmitListeners() {
   try {
     var submitButtons = document.querySelectorAll('.submit');
@@ -180,31 +180,54 @@ function addSubmitListeners() {
   }
 }
 
-// When a submit button is clicked, poll the API for today's POTD submission.
+// Handle submit button click
 function handleSubmit(event) {
   console.log("handleSubmit: Submit button clicked.");
-  chrome.storage.local.get(["userInfo", "problemData"], function(result) {
+  chrome.storage.local.get(["userInfo", "problemData", "userData"], function(result) {
     console.log("handleSubmit: Retrieved data", result);
-    var userInfo = result.userInfo;
-    var problemData = result.problemData;
-    if (!userInfo || !problemData) {
-      console.error("handleSubmit: Missing userInfo or problemData.");
+    
+    // Get user handle from multiple possible sources
+    var userHandle = "Unknown";
+    
+    // Check userInfo first (backend data)
+    if (result.userInfo && result.userInfo.length > 0) {
+      const user = result.userInfo[0];
+      if (user.userID) {
+        userHandle = user.userID;
+      }
+    }
+    
+    // If still Unknown, try userData (what user entered)
+    if (userHandle === "Unknown" && result.userData && result.userData.username) {
+      userHandle = result.userData.username;
+    }
+    
+    if (userHandle === "Unknown") {
+      console.error("handleSubmit: Could not determine user handle");
       return;
     }
-    var userHandle = userInfo[0].handle;
+    
+    var problemData = result.problemData;
+    if (!problemData) {
+      console.error("handleSubmit: Missing problemData.");
+      return;
+    }
+    
     var todayISO = new Date().toISOString().split("T")[0];
     var todaysProblem = problemData.find(function(problem) {
-      return problem.date.split("T")[0] === todayISO;
+      return problem && problem.date && problem.date.split("T")[0] === todayISO;
     });
+    
     if (!todaysProblem) {
       console.error("handleSubmit: Today's problem not found.");
       return;
     }
+    
     pollForSubmission(userHandle, todaysProblem);
   });
 }
 
-// Poll the API every 2 seconds (up to 20 seconds) for an accepted submission for today's POTD.
+// Poll for submissions
 function pollForSubmission(userHandle, todaysProblem) {
   var attempts = 0;
   var maxAttempts = 10;
@@ -242,28 +265,56 @@ function pollForSubmission(userHandle, todaysProblem) {
   }, interval);
 }
 
-// Update the streak UI by recalculating the streak only if today's submission hasn't been recorded yet.
-// We use the "lastSolvedDate" flag (stored in chrome.storage) to check for repetitive submissions.
+// Update streak for today's submission - using backend only
 async function updateStreakForToday(userHandle) {
   const todayISO = new Date().toISOString().split("T")[0];
-  chrome.storage.local.get(["lastSolvedDate", "problemData"], async function(result) {
+  chrome.storage.local.get(["lastSolvedDate", "streakData", "userInfo"], async function(result) {
     if (result.lastSolvedDate === todayISO) {
       console.log("updateStreakForToday: Today's submission already recorded (flag set).");
       return;
     }
-    var problemData = result.problemData || [];
-    const newStreak = await recalcMonthlyStreak(userHandle, problemData);
-    console.log("updateStreakForToday: New streak calculated:", newStreak);
-    // Update the flag to prevent repetitive updates
-    chrome.storage.local.set({ lastSolvedDate: todayISO }, function() {
-      console.log("updateStreakForToday: lastSolvedDate updated to", todayISO);
+    
+    // Get current streak value from storage (backend value)
+    let currentStreak = 0;
+    
+    // Check streakData first
+    if (result.streakData && typeof result.streakData.streak === 'number') {
+      currentStreak = result.streakData.streak;
+    } 
+    // Then userInfo 
+    else if (result.userInfo && result.userInfo[0] && result.userInfo[0].streak) {
+      if (typeof result.userInfo[0].streak.last_streak_count === 'number') {
+        currentStreak = result.userInfo[0].streak.last_streak_count;
+      } else if (result.userInfo[0].streak.last_streak_count) {
+        currentStreak = parseInt(result.userInfo[0].streak.last_streak_count);
+      }
+    }
+    
+    // Increment streak by 1
+    const newStreak = currentStreak + 1;
+    console.log("updateStreakForToday: Incrementing streak from", currentStreak, "to", newStreak);
+    
+    // Update streak in local storage
+    chrome.storage.local.set({ 
+      lastSolvedDate: todayISO,
+      streakData: { streak: newStreak, lastCalculated: todayISO } 
+    }, function() {
+      console.log("updateStreakForToday: Local streak updated to", newStreak);
     });
+    
+    // Update UI
     updateStreakUI(newStreak);
+    
+    // Update streak in backend
+    try {
+      await window.api.updateUserStreak(userHandle, newStreak);
+      console.log("updateStreakForToday: Backend streak updated successfully to", newStreak);
+    } catch (error) {
+      console.error("updateStreakForToday: Error updating backend streak:", error);
+    }
   });
 }
 
-
-  console.log("DOMContentLoaded: Initializing calendar and submit listeners.");
-  createCalendar();
- 
-
+// Initialize on load
+console.log("DOMContentLoaded: Initializing calendar and submit listeners.");
+createCalendar();
