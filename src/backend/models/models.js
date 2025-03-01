@@ -47,6 +47,11 @@ exports.userSchema = new mongoose.Schema({
 	rating:Number,
 	streak : {
 		last_streak_date : Date,
-		last_streak_count : Number
+		last_streak_count : Number, //LEGACY
+        streak_days: {
+            type: Map,
+            of: Boolean,
+            default: {}
+        }
 	}
 });

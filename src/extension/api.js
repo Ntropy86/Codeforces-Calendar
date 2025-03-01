@@ -84,12 +84,13 @@ window.api = {
   /**
    * Update user streak
    * @param {string} handle - Codeforces handle
-   * @param {number} lastStreakCount - Current streak count
+   * @param {number} streakCount - Current streak count
+   * @param {boolean} updateDate - Whether to update the streak date
    * @returns {Promise<Object>} Updated user information
    */
-  async updateUserStreak(handle, lastStreakCount) {
+  async updateUserStreak(handle, streakCount, updateDate = false) {
     try {
-      console.log(`Updating streak for ${handle} to ${lastStreakCount}`);
+      console.log(`Updating streak for ${handle} to ${streakCount} (updateDate: ${updateDate})`);
       
       const response = await this.fetchWithRetry(`${window.config.current.API_URL}/users`, {
         method: 'PUT',
@@ -98,7 +99,8 @@ window.api = {
         },
         body: JSON.stringify({
           userID: handle,
-          last_streak_count: lastStreakCount
+          last_streak_count: streakCount,
+          updateDate: updateDate
         })
       });
       
@@ -119,6 +121,46 @@ window.api = {
       return userData;
     } catch (error) {
       window.errorHandler.logError('updateUserStreak', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Clean up old streak days
+   * @param {string} handle - Codeforces handle
+   * @returns {Promise<Object>} Updated user information
+   */
+  async cleanupOldStreakDays(handle) {
+    try {
+      console.log(`Cleaning up old streak days for ${handle}`);
+      
+      const response = await this.fetchWithRetry(`${window.config.current.API_URL}/users/cleanup-streak-days`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          userID: handle
+        })
+      });
+      
+      console.log("API cleanupOldStreakDays response:", response);
+      
+      let userData = null;
+      
+      if (response.message && typeof response.message === 'object') {
+        userData = response.message;
+      } else if (response.user) {
+        userData = response.user;
+      }
+      
+      if (!userData) {
+        throw new Error("Failed to extract updated user data from response");
+      }
+      
+      return userData;
+    } catch (error) {
+      window.errorHandler.logError('cleanupOldStreakDays', error);
       throw error;
     }
   },
@@ -198,5 +240,47 @@ window.api = {
         error: error.message
       };
     }
+  },
+  
+  /**
+ * Update only the last_streak_date in the database
+ * @param {string} handle - Codeforces handle
+ * @param {string} dateString - ISO date string to set as last_streak_date
+ * @returns {Promise<Object>} Updated user information
+ */
+async updateLastStreakDate(handle, dateString) {
+  try {
+    console.log(`Updating last_streak_date for ${handle} to ${dateString}`);
+    
+    const response = await this.fetchWithRetry(`${window.config.current.API_URL}/users/streak-date`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        userID: handle,
+        last_streak_date: dateString
+      })
+    });
+    
+    console.log("API updateLastStreakDate response:", response);
+    
+    let userData = null;
+    
+    if (response.message && typeof response.message === 'object') {
+      userData = response.message;
+    } else if (response.user) {
+      userData = response.user;
+    }
+    
+    if (!userData) {
+      throw new Error("Failed to extract updated user data from response");
+    }
+    
+    return userData;
+  } catch (error) {
+    window.errorHandler.logError('updateLastStreakDate', error);
+    throw error;
   }
+}
 };

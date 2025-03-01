@@ -1,9 +1,16 @@
-
 require("dotenv").config();
 require("./config/database").connect();
 const express = require("express");
 const bp = require("body-parser");
+const cors = require("cors"); // Add this for CORS support
 const app = express();
+
+// === Set up CORS middleware ===
+app.use(cors({
+  origin: "*", // Allow all origins for now
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
 
 // === Import routes ===
 const userRoutes = require('./routes/userRoutes');

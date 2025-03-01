@@ -15,21 +15,9 @@ async function main() {
 // Set up UI event listeners
 function setupEventListeners() {
   const usernameButton = document.getElementById("userNameBtn");
-  const reloadButton = document.getElementById("reloadBtn");
   
   if (usernameButton) {
     usernameButton.addEventListener("click", recordUsername);
-  }
-  
-  if (reloadButton) {
-    reloadButton.addEventListener("click", async () => {
-      const userData = await window.storage.get(window.storageKeys.USER_DATA);
-      if (userData && userData.username) {
-        await sequence(userData.username);
-      } else {
-        showError("No username found. Please enter your Codeforces handle first.");
-      }
-    });
   }
 }
 
@@ -41,10 +29,10 @@ async function restoreUserData() {
   if (userData && userData.username && usernameElement) {
     usernameElement.value = userData.username;
     
-    // Show reload button if we have a username
-    const reloadButton = document.getElementById("reloadBtn");
-    if (reloadButton) {
-      reloadButton.style.display = "block";
+    // If we have a username, update the button text to make it clear it can be used for reload
+    const userNameBtn = document.getElementById("userNameBtn");
+    if (userNameBtn) {
+      userNameBtn.textContent = "Refresh!";
     }
   }
 }
@@ -110,6 +98,15 @@ function showSuccess(message) {
   }
 }
 
+// Show warning message in UI
+function showMessage(message, className = "status-message") {
+  const statusMessage = document.getElementById("statusMessage");
+  if (statusMessage) {
+    statusMessage.textContent = message;
+    statusMessage.className = className;
+  }
+}
+
 // Show loading status in UI
 function showLoading(message) {
   const statusMessage = document.getElementById("statusMessage");
@@ -147,15 +144,16 @@ async function recordUsername() {
     const usernameButton = document.getElementById("userNameBtn");
     if (usernameButton) {
       usernameButton.innerHTML = "Success!";
+      
+      // Change the button text back to "Refresh!" after a short delay
+      setTimeout(() => {
+        if (usernameButton) {
+          usernameButton.innerHTML = "Refresh!";
+        }
+      }, 2000);
     }
     
     showSuccess("Ready to use! Visit Codeforces to see your calendar.");
-    
-    // Show reload button
-    const reloadButton = document.getElementById("reloadBtn");
-    if (reloadButton) {
-      reloadButton.style.display = "block";
-    }
   } catch (err) {
     window.errorHandler.logError('recordUsername', err);
     showError(err.message || "Failed to process your request");
@@ -221,8 +219,12 @@ async function sequence(handle) {
     await window.storage.set(window.storageKeys.PROBLEM_DATA, formattedProblems);
     console.log("Problem data stored in local storage");
     
-    // Update the UI with streak data
-    updateStreakUI(streakCount);
+    // Check if streak should be reset
+    await window.streak.checkAndResetStreakIfNeeded(handle);
+    
+    // Update the UI with streak data - use dynamic calculation
+    const dynamicStreakCount = await window.streak.getCurrentStreak();
+    updateStreakUI(dynamicStreakCount);
     
     // Inject calendar into Codeforces
     chrome.runtime.sendMessage({ action: "injectCalendarHTML" });
