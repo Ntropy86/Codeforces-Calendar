@@ -16,6 +16,7 @@ app.use(cors({
 const userRoutes = require('./routes/userRoutes');
 const globalProblemSetRoutes = require('./routes/globalProblemSetRoutes');
 const filteredProblemSetRoutes = require('./routes/filteredProblemSetRoutes');
+const testRoutes = require('./routes/testRoutes');
 
 // === Middleware ===
 app.use(express.json());
@@ -31,5 +32,6 @@ app.get("/welcome", (req, res) => {
 app.use("/users", userRoutes);
 app.use("/problemset", globalProblemSetRoutes);
 app.use("/problemset", filteredProblemSetRoutes);
+app.use("/test", testRoutes);
 
 module.exports = app;

@@ -201,8 +201,12 @@ window.api = {
    */
   async verifySubmission(handle, problem) {
     try {
+      const test_mode = false; // WARNING: Set to true for testing
       // Fetch recent submissions from Codeforces API
-      const url = `https://codeforces.com/api/user.status?handle=${handle}&from=1&count=10`;
+      
+      const url = test_mode? `http://localhost:4000/test/submissions`:`https://codeforces.com/api/user.status?handle=${handle}&from=1&count=10`;      
+
+      console.log("Fetching submissions from:", url);
       
       const response = await this.fetchWithRetry(url, { method: 'GET' });
       
@@ -241,7 +245,7 @@ window.api = {
       };
     }
   },
-  
+
   /**
  * Update only the last_streak_date in the database
  * @param {string} handle - Codeforces handle

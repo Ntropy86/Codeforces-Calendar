@@ -1,0 +1,355 @@
+
+
+{
+    "status": "OK",
+    "result": [
+        {
+            "id": 306852115,
+            "contestId": 1950,
+            "creationTimeSeconds": 1739959815,
+            "relativeTimeSeconds": 2147483647,
+            "problem": {
+                "contestId": 1950,
+                "index": "E",
+                "name": "Nearly Shortest Repeating Substring",
+                "type": "PROGRAMMING",
+                "rating": 1500,
+                "tags": [
+                    "brute force",
+                    "implementation",
+                    "number theory",
+                    "strings"
+                ]
+            },
+            "author": {
+                "contestId": 1950,
+                "members": [
+                    {
+                        "handle": "disypher"
+                    }
+                ],
+                "participantType": "PRACTICE",
+                "ghost": false,
+                "startTimeSeconds": 1711637100
+            },
+            "programmingLanguage": "C++20 (GCC 13-64)",
+            "verdict": "OK",
+            "testset": "TESTS",
+            "passedTestCount": 119,
+            "timeConsumedMillis": 187,
+            "memoryConsumedBytes": 102400
+        },
+        {
+            "id": 306851419,
+            "contestId": 1950,
+            "creationTimeSeconds": 1739959447,
+            "relativeTimeSeconds": 2147483647,
+            "problem": {
+                "contestId": 1950,
+                "index": "E",
+                "name": "Nearly Shortest Repeating Substring",
+                "type": "PROGRAMMING",
+                "rating": 1500,
+                "tags": [
+                    "brute force",
+                    "implementation",
+                    "number theory",
+                    "strings"
+                ]
+            },
+            "author": {
+                "contestId": 1950,
+                "members": [
+                    {
+                        "handle": "disypher"
+                    }
+                ],
+                "participantType": "PRACTICE",
+                "ghost": false,
+                "startTimeSeconds": 1711637100
+            },
+            "programmingLanguage": "C++20 (GCC 13-64)",
+            "verdict": "OK",
+            "testset": "TESTS",
+            "passedTestCount": 119,
+            "timeConsumedMillis": 202,
+            "memoryConsumedBytes": 102400
+        },
+        {
+            "id": 306851065,
+            "contestId": 1958,
+            "creationTimeSeconds": 1739959251,
+            "relativeTimeSeconds": 2147483647,
+            "problem": {
+                "contestId": 1958,
+                "index": "C",
+                "name": "Firewood",
+                "type": "PROGRAMMING",
+                "rating": 1500,
+                "tags": [
+                    "*special"
+                ]
+            },
+            "author": {
+                "contestId": 1958,
+                "members": [
+                    {
+                        "handle": "disypher"
+                    }
+                ],
+                "participantType": "PRACTICE",
+                "ghost": false,
+                "startTimeSeconds": 1715610900
+            },
+            "programmingLanguage": "Kotlin 1.7",
+            "verdict": "OK",
+            "testset": "TESTS",
+            "passedTestCount": 8,
+            "timeConsumedMillis": 453,
+            "memoryConsumedBytes": 9216000
+        },
+        {
+            "id": 306780808,
+            "contestId": 1894,
+            "creationTimeSeconds": 1739904008,
+            "relativeTimeSeconds": 2147483647,
+            "problem": {
+                "contestId": 1894,
+                "index": "A",
+                "name": "Secret Sport",
+                "type": "PROGRAMMING",
+                "points": 500.0,
+                "rating": 800,
+                "tags": [
+                    "implementation",
+                    "strings"
+                ]
+            },
+            "author": {
+                "contestId": 1894,
+                "members": [
+                    {
+                        "handle": "disypher"
+                    }
+                ],
+                "participantType": "PRACTICE",
+                "ghost": false,
+                "startTimeSeconds": 1699367700
+            },
+            "programmingLanguage": "C++20 (GCC 13-64)",
+            "verdict": "OK",
+            "testset": "TESTS",
+            "passedTestCount": 4,
+            "timeConsumedMillis": 46,
+            "memoryConsumedBytes": 102400
+        },
+        {
+            "id": 306780699,
+            "contestId": 1894,
+            "creationTimeSeconds": 1739903952,
+            "relativeTimeSeconds": 2147483647,
+            "problem": {
+                "contestId": 1894,
+                "index": "A",
+                "name": "Secret Sport",
+                "type": "PROGRAMMING",
+                "points": 500.0,
+                "rating": 800,
+                "tags": [
+                    "implementation",
+                    "strings"
+                ]
+            },
+            "author": {
+                "contestId": 1894,
+                "members": [
+                    {
+                        "handle": "disypher"
+                    }
+                ],
+                "participantType": "PRACTICE",
+                "ghost": false,
+                "startTimeSeconds": 1699367700
+            },
+            "programmingLanguage": "C++20 (GCC 13-64)",
+            "verdict": "OK",
+            "testset": "TESTS",
+            "passedTestCount": 4,
+            "timeConsumedMillis": 61,
+            "memoryConsumedBytes": 102400
+        },
+        {
+            "id": 306780180,
+            "contestId": 1894,
+            "creationTimeSeconds": 1739903702,
+            "relativeTimeSeconds": 2147483647,
+            "problem": {
+                "contestId": 1894,
+                "index": "A",
+                "name": "Secret Sport",
+                "type": "PROGRAMMING",
+                "points": 500.0,
+                "rating": 800,
+                "tags": [
+                    "implementation",
+                    "strings"
+                ]
+            },
+            "author": {
+                "contestId": 1894,
+                "members": [
+                    {
+                        "handle": "disypher"
+                    }
+                ],
+                "participantType": "PRACTICE",
+                "ghost": false,
+                "startTimeSeconds": 1699367700
+            },
+            "programmingLanguage": "C++20 (GCC 13-64)",
+            "verdict": "OK",
+            "testset": "TESTS",
+            "passedTestCount": 4,
+            "timeConsumedMillis": 46,
+            "memoryConsumedBytes": 102400
+        },
+        {
+            "id": 268278029,
+            "contestId": 1989,
+            "creationTimeSeconds": 1719817957,
+            "relativeTimeSeconds": 2147483647,
+            "problem": {
+                "contestId": 1989,
+                "index": "B",
+                "name": "Substring and Subsequence",
+                "type": "PROGRAMMING",
+                "rating": 1200,
+                "tags": [
+                    "brute force",
+                    "greedy",
+                    "strings"
+                ]
+            },
+            "author": {
+                "contestId": 1989,
+                "members": [
+                    {
+                        "handle": "disypher"
+                    }
+                ],
+                "participantType": "PRACTICE",
+                "ghost": false,
+                "startTimeSeconds": 1719498900
+            },
+            "programmingLanguage": "C++20 (GCC 13-64)",
+            "verdict": "OK",
+            "testset": "TESTS",
+            "passedTestCount": 34,
+            "timeConsumedMillis": 109,
+            "memoryConsumedBytes": 0
+        },
+        {
+            "id": 268276696,
+            "contestId": 1989,
+            "creationTimeSeconds": 1719817311,
+            "relativeTimeSeconds": 2147483647,
+            "problem": {
+                "contestId": 1989,
+                "index": "B",
+                "name": "Substring and Subsequence",
+                "type": "PROGRAMMING",
+                "rating": 1200,
+                "tags": [
+                    "brute force",
+                    "greedy",
+                    "strings"
+                ]
+            },
+            "author": {
+                "contestId": 1989,
+                "members": [
+                    {
+                        "handle": "disypher"
+                    }
+                ],
+                "participantType": "PRACTICE",
+                "ghost": false,
+                "startTimeSeconds": 1719498900
+            },
+            "programmingLanguage": "C++20 (GCC 13-64)",
+            "verdict": "WRONG_ANSWER",
+            "testset": "TESTS",
+            "passedTestCount": 1,
+            "timeConsumedMillis": 46,
+            "memoryConsumedBytes": 0
+        },
+        {
+            "id": 268156183,
+            "contestId": 1989,
+            "creationTimeSeconds": 1719759370,
+            "relativeTimeSeconds": 2147483647,
+            "problem": {
+                "contestId": 1989,
+                "index": "B",
+                "name": "Substring and Subsequence",
+                "type": "PROGRAMMING",
+                "rating": 1200,
+                "tags": [
+                    "brute force",
+                    "greedy",
+                    "strings"
+                ]
+            },
+            "author": {
+                "contestId": 1989,
+                "members": [
+                    {
+                        "handle": "disypher"
+                    }
+                ],
+                "participantType": "PRACTICE",
+                "ghost": false,
+                "startTimeSeconds": 1719498900
+            },
+            "programmingLanguage": "C++20 (GCC 13-64)",
+            "verdict": "WRONG_ANSWER",
+            "testset": "TESTS",
+            "passedTestCount": 1,
+            "timeConsumedMillis": 46,
+            "memoryConsumedBytes": 0
+        },
+        {
+            "id": 268154123,
+            "contestId": 1989,
+            "creationTimeSeconds": 1719759171,
+            "relativeTimeSeconds": 2147483647,
+            "problem": {
+                "contestId": 1989,
+                "index": "A",
+                "name": "Catch the Coin",
+                "type": "PROGRAMMING",
+                "rating": 800,
+                "tags": [
+                    "implementation"
+                ]
+            },
+            "author": {
+                "contestId": 1989,
+                "members": [
+                    {
+                        "handle": "disypher"
+                    }
+                ],
+                "participantType": "PRACTICE",
+                "ghost": false,
+                "startTimeSeconds": 1719498900
+            },
+            "programmingLanguage": "C++20 (GCC 13-64)",
+            "verdict": "OK",
+            "testset": "TESTS",
+            "passedTestCount": 7,
+            "timeConsumedMillis": 61,
+            "memoryConsumedBytes": 0
+        }
+    ]
+}
