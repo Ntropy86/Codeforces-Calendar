@@ -1,269 +1,573 @@
-// Recalculate the current monthly streak by fetching the last 50 submissions and matching them against problemData
-async function recalcMonthlyStreak(userHandle, problemData) {
+/**
+ * Main content script for Codeforces POTD extension
+ */
+
+// Define createCalendar function first before it's referenced
+async function createCalendar() {
+  console.log("createCalendar: Called");
   try {
-    const response = await fetch(`https://codeforces.com/api/user.status?handle=${userHandle}&count=50`);
-    const data = await response.json();
-    if (data.status !== "OK") {
-      console.error("recalcMonthlyStreak: Error fetching submissions", data);
-      return 0;
-    }
-    const submissions = data.result;
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth();
+    const currentDate = new Date();
+    const slicedDate = currentDate.toISOString().split("T")[0];
+    console.log("Current date (ISO):", slicedDate);
 
-    // Filter submissions to those made in the current month.
-    const monthSubmissions = submissions.filter(sub => {
-      const subDate = new Date(sub.creationTimeSeconds * 1000);
-      return subDate.getFullYear() === currentYear && subDate.getMonth() === currentMonth;
-    });
+    const currentYear = currentDate.getFullYear();
+    const currentMonth = currentDate.getMonth();
+    const displayMonth = currentMonth + 1; // Adjust for display
 
-    let streak = 0;
-    let day = new Date(now); // start from today
-    while (true) {
-      const isoDay = day.toISOString().split("T")[0];
-      // Find the problem scheduled for this day from stored problemData
-      const todaysProblem = problemData.find(p => p.date.split("T")[0] === isoDay);
-      if (!todaysProblem) break; // no problem scheduled means stop
-      // Check for an accepted submission matching this day’s POTD
-      const solved = monthSubmissions.some(sub => {
-        const subISO = new Date(sub.creationTimeSeconds * 1000).toISOString().split("T")[0];
-        return subISO === isoDay &&
-               sub.problem.contestId === todaysProblem.problem.contestId &&
-               sub.problem.index === todaysProblem.problem.index &&
-               sub.verdict === "OK";
-      });
-      if (solved) {
-        streak++;
-      } else {
-        break;
+    const monthNames = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+
+    // Retrieve all needed data from storage
+    const result = await window.storage.getMultiple([
+      window.storageKeys.PROBLEM_DATA, 
+      window.storageKeys.USER_INFO, 
+      window.storageKeys.USER_DATA
+    ]);
+    
+    console.log("createCalendar: Retrieved storage data", result);
+    console.log("Raw userInfo:", result.userInfo);
+    
+    const problemData = result.problemData || [];
+    console.log("Problem data:", problemData);
+    
+    // Extract user handle from multiple possible sources
+    let userHandle = "Unknown";
+    
+    // Check userInfo first (backend data)
+    if (result.userInfo && Array.isArray(result.userInfo) && result.userInfo.length > 0) {
+      if (result.userInfo[0] && Array.isArray(result.userInfo[0]) && result.userInfo[0].length > 0) {
+        const user = result.userInfo[0][0];
+        console.log("User info for calendar:", user);
+        
+        // Check for userID field first (backend format)
+        if (user && user.userID) {
+          userHandle = user.userID;
+          console.log("Using userID from userInfo:", userHandle);
+        }
       }
-      day.setDate(day.getDate() - 1);
-      if (day.getMonth() !== currentMonth) break;
     }
-    return streak;
-  } catch (err) {
-    console.error("recalcMonthlyStreak error:", err);
-    return 0;
+    
+    // If still Unknown, try userData (what the user entered)
+    if (userHandle === "Unknown" && result.userData && result.userData.username) {
+      userHandle = result.userData.username;
+      console.log("Using username from userData:", userHandle);
+    }
+
+  // Synchronize streak days with database last_streak_date
+if (userHandle !== "Unknown") {
+  try {
+    await window.streak.syncStreakDaysWithDatabase(userHandle);
+  } catch (error) {
+    window.errorHandler.logError('createCalendar_syncStreak', error);
   }
 }
+    
+    // Check if streak should be reset and do it automatically
+    if (userHandle !== "Unknown") {
+      try {
+        const shouldReset = await window.streak.shouldResetStreak();
+        if (shouldReset) {
+          console.log("Streak was automatically reset due to gap in solving");
+          // Only reset the streak count, don't update the streak date
+          const streakCount = 0;
+          const updatedUser = await window.api.updateUserStreak(userHandle, streakCount);
+          
+          // Update local storage with the reset user data
+          if (updatedUser) {
+            await window.storage.set(window.storageKeys.USER_INFO, [updatedUser]);
+            console.log("Streak reset in backend:", updatedUser);
+          }
+        }
+      } catch (error) {
+        window.errorHandler.logError('createCalendar_streakCheck', error);
+      }
+    }
+    
+    // Get streak count directly from userInfo (the database source of truth)
+    let streakCount = 0;
+try {
+  // Get the streak count dynamically instead of using the stored value
+  streakCount = await window.streak.getCurrentStreak();
+  console.log("Dynamically calculated streak for calendar:", streakCount);
+} catch (error) {
+  console.error("Error getting dynamic streak count:", error);
+  
+  // Fallback to stored streak count if needed
+  if (result.userInfo && Array.isArray(result.userInfo) && result.userInfo.length > 0 && result.userInfo[0].length > 0) {
+    const user = result.userInfo[0][0];
+    if (user && user.streak && user.streak.last_streak_count !== undefined) {
+      if (typeof user.streak.last_streak_count === 'number') {
+        streakCount = user.streak.last_streak_count;
+      } else {
+        streakCount = parseInt(user.streak.last_streak_count);
+      }
+      console.log("Falling back to stored streak count:", streakCount);
+    }
+  }
+}
+console.log("Final streak for calendar:", streakCount);
 
-// Render the calendar with problem hyperlinks (only for past/current dates) and recalc the monthly streak on each render.
-function createCalendar() {
-  console.log("createCalendar: Called");
-  var currentDate = new Date();
-  var slicedDate = currentDate.toISOString().split("T")[0];
-  console.log("Current date (ISO):", slicedDate);
-
-  var currentYear = currentDate.getFullYear();
-  var currentMonth = currentDate.getMonth();
-  var displayMonth = currentMonth + 1; // Adjust for display
-
-  var monthNames = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
-  ];
-
-  // Retrieve problemData and userInfo from storage; then recalc the streak.
-  chrome.storage.local.get(["problemData", "userInfo"], async function (result) {
-    console.log("createCalendar: Retrieved storage data", result);
-    var problemData = result.problemData || [];
-    var userHandle = (result.userInfo && result.userInfo[0].handle) || "Unknown";
-    var streak = await recalcMonthlyStreak(userHandle, problemData);
-    console.log("createCalendar: Calculated streak =", streak);
-
-    var calendarHTML = '<table style="width:100%" class="calendar">';
-    calendarHTML += '<tr><th colspan="7">' + monthNames[currentMonth] + ' ' + currentYear + '</th></tr>';
-    calendarHTML += '<tr><td colspan="7">Active user: ' + userHandle + ' | Current Monthly Streak: <span id="calendar-streak">' + streak + '</span></td></tr>';
-    calendarHTML += '<tr><th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th></tr>';
+    // Render the calendar HTML
+    let calendarHTML = `
+    <div class="cf-potd-container">
+      <table class="calendar">
+        <tr class="calendar-header">
+          <th colspan="7">${monthNames[currentMonth]} ${currentYear}</th>
+        </tr>
+        <tr class="user-info-row">
+          <td colspan="7">
+            <div class="user-info">
+              <span class="user-handle">${userHandle}</span>
+              <div class="streak-container">
+                <span class="streak-flame">🔥</span>
+                <span id="calendar-streak" class="streak-count">${streakCount}</span>
+                <span class="streak-label">day streak</span>
+              </div>
+            </div>
+          </td>
+        </tr>
+        <tr class="day-header">
+          <th>Sun</th>
+          <th>Mon</th>
+          <th>Tue</th>
+          <th>Wed</th>
+          <th>Thu</th>
+          <th>Fri</th>
+          <th>Sat</th>
+        </tr>
+    `;
 
     // Determine first day and number of days in the month
-    var firstDay = new Date(currentYear, currentMonth, 1).getDay();
-    var daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-    var day = 1;
-    var referenceDate = currentDate.getDate(); // today's day-of-month
+    const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    let day = 1;
+    const referenceDate = currentDate.getDate(); // today's day-of-month
 
-    for (var i = 0; i < 6; i++) {
+    for (let i = 0; i < 6; i++) {
       calendarHTML += "<tr>";
-      for (var j = 0; j < 7; j++) {
+      for (let j = 0; j < 7; j++) {
         if (i === 0 && j < firstDay) {
           calendarHTML += "<td></td>";
         } else if (day > daysInMonth) {
           break;
         } else {
-          var formattedMonth = displayMonth.toString().padStart(2, "0");
-          var formattedDay = day.toString().padStart(2, "0");
-          var isoDate = currentYear + '-' + formattedMonth + '-' + formattedDay;
+          const formattedMonth = displayMonth.toString().padStart(2, "0");
+          const formattedDay = day.toString().padStart(2, "0");
+          const isoDate = `${currentYear}-${formattedMonth}-${formattedDay}`;
           
-          // Reset URL for this day.
-          var url = "";
-          if (problemData) {
-            var filteredProblems = problemData.filter(function (problem) {
-              var problemDate = problem.date.split("T")[0];
-              return problemDate == isoDate;
+          // Find problem for this day
+          let url = "";
+          let cellClass = "";
+          
+          if (day < referenceDate) {
+            cellClass = "past";
+          } else if (day === referenceDate) {
+            cellClass = "today";
+          } else {
+            cellClass = "future";
+          }
+          
+          if (problemData && problemData.length > 0) {
+            const filteredProblems = problemData.filter(function(problem) {
+              if (!problem || !problem.date) return false;
+              const problemDate = problem.date.split("T")[0];
+              return problemDate === isoDate;
             });
-            if (filteredProblems.length > 0) {
+            
+            if (filteredProblems.length > 0 && filteredProblems[0].url) {
               url = filteredProblems[0].url;
             }
           }
           
-          // Only hyperlink if a URL exists and the day is today or in the past.
-          var cellContent = (url && day <= referenceDate) ? '<a href="' + url + '" target="_blank">' + day + '</a>' : day;
-          calendarHTML += '<td data-date="' + isoDate + '">' + cellContent + '</td>';
+          // Only hyperlink if a URL exists and the day is today or in the past
+          const cellContent = (url && day <= referenceDate) 
+            ? `<a href="${url}" target="_blank">${day}</a>` 
+            : day;
+          
+          calendarHTML += `<td class="${cellClass}" data-date="${isoDate}">${cellContent}</td>`;
           day++;
         }
       }
       calendarHTML += "</tr>";
       if (day > daysInMonth) break;
     }
-    calendarHTML += "</table>";
+    calendarHTML += "</table></div>";
 
-    var sidebar = document.getElementById("sidebar");
+    // Find or create the sidebar element
+    let sidebar = document.getElementById("sidebar");
+    if (!sidebar) {
+      // If sidebar doesn't exist, create a new one
+      const pageContent = document.querySelector('.content-with-sidebar');
+      if (pageContent) {
+        sidebar = document.createElement('div');
+        sidebar.id = 'sidebar';
+        sidebar.className = 'sidebar';
+        pageContent.appendChild(sidebar);
+      }
+    }
+    
     if (sidebar) {
-      var existingCalendar = sidebar.querySelector(".calendar");
+      const existingCalendar = sidebar.querySelector(".calendar");
       if (existingCalendar) {
-        sidebar.removeChild(existingCalendar);
-        console.log("createCalendar: Removed existing calendar.");
+        const container = existingCalendar.closest('.cf-potd-container');
+        if (container) {
+          container.remove();
+          console.log("createCalendar: Removed existing calendar.");
+        }
       }
       sidebar.insertAdjacentHTML("afterbegin", calendarHTML);
       console.log("createCalendar: Calendar injected successfully.");
     } else {
       console.error("createCalendar: Sidebar element not found.");
     }
-  });
-  console.log("createCalendar: End of function (waiting for storage callback).");
+  } catch (error) {
+    window.errorHandler.logError('createCalendar', error);
+  }
+  
+  // Mark calendar based on streak data
+  markCalendarBasedOnStreak();
+  
+  // Add submit listeners after calendar is created
   addSubmitListeners();
 }
 
-// Mark today's cell as solved by adding a check mark.
+// Define refreshCalendar after createCalendar is defined
+window.refreshCalendar = function() {
+  console.log("Refreshing calendar due to streak changes");
+  
+  // Get the existing calendar and remove it
+  const existingCalendar = document.querySelector(".cf-potd-container");
+  if (existingCalendar) {
+    existingCalendar.remove();
+  }
+  
+  // Create a new calendar
+  createCalendar();
+};
+
+// Mark today's cell as solved
 function markCalendarTick() {
   console.log("markCalendarTick: Marking today's cell as solved.");
-  var todayISO = new Date().toISOString().split("T")[0];
-  var calendarCells = document.querySelectorAll(".calendar td");
+  const todayISO = window.dateUtils.getTodayISO();
+  const calendarCells = document.querySelectorAll(".calendar td");
+  
   calendarCells.forEach(function(cell) {
     if (cell.getAttribute("data-date") === todayISO) {
       cell.classList.add("solved");
+      
+      // Only add checkmark if it doesn't already have one
       if (!cell.innerHTML.includes("✔")) {
-        cell.innerHTML += " ✔";
+        // If the cell has a link, add checkmark after the link
+        if (cell.querySelector('a')) {
+          cell.querySelector('a').insertAdjacentHTML('afterend', ' <span class="checkmark">✔</span>');
+        } else {
+          cell.innerHTML += ' <span class="checkmark">✔</span>';
+        }
       }
       console.log("markCalendarTick: Marked cell for", todayISO);
     }
   });
 }
 
-// Update the streak UI in the calendar header.
+// Mark calendar cells based on streak data
+// Mark calendar cells based on streak data
+async function markCalendarBasedOnStreak() {
+  console.log("markCalendarBasedOnStreak: Marking cells based on streak data");
+  
+  try {
+    // Get dates to mark as solved from streak service
+    const datesToMark = await window.streak.getDatesToMarkSolved();
+    console.log("Dates to mark as solved:", datesToMark);
+    
+    // Get all calendar cells
+    const calendarCells = document.querySelectorAll(".calendar td");
+    console.log("Calendar cells found:", calendarCells.length);
+    
+    if (datesToMark.length === 0) {
+      console.log("No dates to mark as solved - checking directly from userInfo");
+      
+      // As a fallback, try to get the user info directly
+      const userInfo = await window.storage.get(window.storageKeys.USER_INFO);
+      console.log("Raw userInfo in markCalendarBasedOnStreak:", userInfo);
+      
+      // Try to extract streak days directly
+      let streakDays = {};
+      
+      if (userInfo && Array.isArray(userInfo) && userInfo.length > 0) {
+        if (Array.isArray(userInfo[0]) && userInfo[0].length > 0) {
+          const user = userInfo[0][0];
+          if (user && user.streak && user.streak.streak_days) {
+            streakDays = user.streak.streak_days;
+            console.log("Directly extracted streak days:", streakDays);
+          }
+        } else if (userInfo[0] && userInfo[0].streak && userInfo[0].streak.streak_days) {
+          streakDays = userInfo[0].streak.streak_days;
+          console.log("Directly extracted streak days:", streakDays);
+        }
+      }
+      
+      // Mark days based on directly extracted streak days
+      if (Object.keys(streakDays).length > 0) {
+        calendarCells.forEach(function(cell) {
+          const cellDate = cell.getAttribute("data-date");
+          if (cellDate) {
+            const cellParts = cellDate.split('-');
+            const cellYear = cellParts[0];
+            const cellMonth = cellParts[1].replace(/^0/, ''); // Remove leading zero
+            const cellDay = cellParts[2].replace(/^0/, ''); // Remove leading zero
+            
+            // Check different formats of the day key
+            const keyFormats = [
+              `${cellYear}-${cellMonth}-${cellDay}`,
+              `${cellYear}-${parseInt(cellMonth)}-${parseInt(cellDay)}`,
+              `${cellYear}-${cellMonth.padStart(2, '0')}-${cellDay.padStart(2, '0')}`
+            ];
+            
+            // Check if any key format is found in streakDays
+            const isMarked = keyFormats.some(key => streakDays[key] === true);
+            
+            if (isMarked) {
+              cell.classList.add("solved");
+              
+              // Only add checkmark if it doesn't already have one
+              if (!cell.innerHTML.includes("✔")) {
+                // If the cell has a link, add checkmark after the link
+                if (cell.querySelector('a')) {
+                  cell.querySelector('a').insertAdjacentHTML('afterend', ' <span class="checkmark">✔</span>');
+                } else {
+                  cell.innerHTML += ' <span class="checkmark">✔</span>';
+                }
+              }
+              
+              console.log("Marked cell for", cellDate);
+            }
+          }
+        });
+        
+        return;
+      }
+    }
+    
+    // If we get here, we're using the dates from getDatesToMarkSolved
+    // Mark each cell that matches a date to mark
+    calendarCells.forEach(function(cell) {
+      const cellDate = cell.getAttribute("data-date");
+      
+      if (cellDate && datesToMark.includes(cellDate)) {
+        cell.classList.add("solved");
+        
+        // Only add checkmark if it doesn't already have one
+        if (!cell.innerHTML.includes("✔")) {
+          // If the cell has a link, add checkmark after the link
+          if (cell.querySelector('a')) {
+            cell.querySelector('a').insertAdjacentHTML('afterend', ' <span class="checkmark">✔</span>');
+          } else {
+            cell.innerHTML += ' <span class="checkmark">✔</span>';
+          }
+        }
+        
+        console.log("Marked cell for", cellDate);
+      }
+    });
+  } catch (error) {
+    window.errorHandler.logError('markCalendarBasedOnStreak', error);
+  }
+}
+
+// Update the streak UI in the calendar
 function updateStreakUI(streak) {
   console.log("updateStreakUI: Updating streak UI to", streak);
-  var streakElem = document.getElementById("calendar-streak");
+  const streakElem = document.getElementById("calendar-streak");
   if (streakElem) {
+    console.log("Found streak element, updating to:", streak);
     streakElem.textContent = streak;
   } else {
     console.warn("updateStreakUI: Streak element not found.");
   }
 }
 
-// Attach event listeners to elements with the class "submit" using try/catch.
+// Attach event listeners to submit buttons
 function addSubmitListeners() {
   try {
-    var submitButtons = document.querySelectorAll('.submit');
+    const submitButtons = document.querySelectorAll('.submit');
     console.log("addSubmitListeners: Found", submitButtons.length, "submit buttons.");
+    
     if (submitButtons.length === 0) {
       console.log("addSubmitListeners: No submit buttons found on this page.");
       return;
     }
+    
+    // Remove existing listeners first to prevent duplicates
     submitButtons.forEach(function(button) {
+      const clone = button.cloneNode(true);
+      button.parentNode.replaceChild(clone, button);
+    });
+    
+    // Add new listeners
+    document.querySelectorAll('.submit').forEach(function(button) {
       button.addEventListener("click", handleSubmit);
     });
+    
     console.log("addSubmitListeners: Event listeners attached.");
   } catch (error) {
-    console.error("addSubmitListeners: Error attaching listeners:", error);
+    window.errorHandler.logError('addSubmitListeners', error);
   }
 }
 
-// When a submit button is clicked, poll the API for today's POTD submission.
-function handleSubmit(event) {
+// Handle submit button click
+async function handleSubmit(event) {
   console.log("handleSubmit: Submit button clicked.");
-  chrome.storage.local.get(["userInfo", "problemData"], function(result) {
-    console.log("handleSubmit: Retrieved data", result);
-    var userInfo = result.userInfo;
-    var problemData = result.problemData;
-    if (!userInfo || !problemData) {
-      console.error("handleSubmit: Missing userInfo or problemData.");
+  try {
+    // Get required data from storage
+    const data = await window.storage.getMultiple([
+      window.storageKeys.USER_INFO,
+      window.storageKeys.PROBLEM_DATA,
+      window.storageKeys.USER_DATA
+    ]);
+    
+    console.log("handleSubmit: Retrieved data", data);
+    
+    // Get user handle from multiple possible sources
+    let userHandle = "Unknown";
+    
+    // Check userInfo first (backend data)
+    if (data.userInfo && Array.isArray(data.userInfo) && data.userInfo.length > 0 && data.userInfo[0].length > 0) {
+      const user = data.userInfo[0][0];
+      if (user && user.userID) {
+        userHandle = user.userID;
+      }
+    }
+    
+    // If still Unknown, try userData (what user entered)
+    if (userHandle === "Unknown" && data.userData && data.userData.username) {
+      userHandle = data.userData.username;
+    }
+    
+    if (userHandle === "Unknown") {
+      window.errorHandler.displayError("Could not determine user handle");
       return;
     }
-    var userHandle = userInfo[0].handle;
-    var todayISO = new Date().toISOString().split("T")[0];
-    var todaysProblem = problemData.find(function(problem) {
-      return problem.date.split("T")[0] === todayISO;
+    
+    const problemData = data.problemData;
+    if (!problemData || !Array.isArray(problemData)) {
+      window.errorHandler.displayError("Missing or invalid problemData");
+      return;
+    }
+    
+    const todayISO = window.dateUtils.getTodayISO();
+    const todaysProblem = problemData.find(function(problem) {
+      return problem && problem.date && problem.date.split("T")[0] === todayISO;
     });
+    
     if (!todaysProblem) {
-      console.error("handleSubmit: Today's problem not found.");
+      window.errorHandler.displayError("Today's problem not found");
       return;
     }
+    
+    // Start polling for submission
     pollForSubmission(userHandle, todaysProblem);
-  });
+  } catch (error) {
+    window.errorHandler.logError('handleSubmit', error);
+  }
 }
 
-// Poll the API every 2 seconds (up to 20 seconds) for an accepted submission for today's POTD.
+// Poll for submissions
 function pollForSubmission(userHandle, todaysProblem) {
-  var attempts = 0;
-  var maxAttempts = 10;
-  var interval = 2000;
+  const maxAttempts = 10;
+  const interval = 2000;
+  let attempts = 0;
+  
   console.log("pollForSubmission: Starting polling for", userHandle);
-  var pollInterval = setInterval(async function() {
+  
+  // Show polling status to user
+  const statusDiv = document.createElement('div');
+  statusDiv.className = 'cf-potd-status';
+  statusDiv.textContent = 'Checking submission...';
+  document.body.appendChild(statusDiv);
+  
+  const pollInterval = setInterval(async function() {
     attempts++;
     console.log("pollForSubmission: Attempt", attempts);
+    
+    // Update status indicator
+    statusDiv.textContent = `Checking submission... (${attempts}/${maxAttempts})`;
+    
     try {
-      var response = await fetch("https://codeforces.com/api/user.status?handle=" + userHandle + "&from=1&count=1");
-      var data = await response.json();
-      console.log("pollForSubmission: API response", data);
-      if (data.status !== "OK") {
-        console.error("pollForSubmission: API error", data);
-        return;
-      }
-      if (data.result && data.result.length > 0) {
-        var latestSubmission = data.result[0];
-        if (latestSubmission.problem.contestId === todaysProblem.problem.contestId &&
-            latestSubmission.problem.index === todaysProblem.problem.index &&
-            latestSubmission.verdict === "OK") {
-          console.log("pollForSubmission: Found accepted submission for today's POTD.");
-          clearInterval(pollInterval);
-          updateStreakForToday(userHandle);
+      // Use our API wrapper with retry logic
+      const result = await window.api.verifySubmission(userHandle, todaysProblem);
+      
+      if (result.verified) {
+        console.log("pollForSubmission: Found accepted submission for today's POTD.");
+        clearInterval(pollInterval);
+        
+        // Update status
+        statusDiv.textContent = 'Submission verified! Updating streak...';
+        statusDiv.style.backgroundColor = '#c8e6c9';
+        
+        // Update streak
+        const streakResult = await window.streak.validateAndUpdateStreak(userHandle, todaysProblem);
+        
+        if (streakResult.success) {
+          updateStreakUI(streakResult.newStreak);
+          
+          // If streak was reset, show different message
+          if (streakResult.wasReset) {
+            statusDiv.textContent = `Streak was reset and now updated to ${streakResult.newStreak}`;
+          } else {
+            statusDiv.textContent = `Streak updated to ${streakResult.newStreak}!`;
+          }
+          
+          // Mark today's problem as solved
           markCalendarTick();
+          
+          // Update entire calendar based on streak
+          markCalendarBasedOnStreak();
+          
+          // Force a refresh of the calendar to ensure it shows the latest data
+          setTimeout(() => {
+            window.refreshCalendar();
+          }, 1000);
+          
+          setTimeout(() => {
+            statusDiv.remove();
+          }, 3000);
+        } else {
+          statusDiv.textContent = `Error updating streak: ${streakResult.reason}`;
+          statusDiv.style.backgroundColor = '#ffcdd2';
+          setTimeout(() => {
+            statusDiv.remove();
+          }, 3000);
         }
       }
     } catch (error) {
       console.error("pollForSubmission: Error during polling:", error);
     }
+    
     if (attempts >= maxAttempts) {
       clearInterval(pollInterval);
       console.log("pollForSubmission: Polling ended without a successful submission.");
+      
+      // Update status
+      statusDiv.textContent = 'No accepted submission found. Try again later.';
+      statusDiv.style.backgroundColor = '#fff9c4';
+      setTimeout(() => {
+        statusDiv.remove();
+      }, 3000);
     }
   }, interval);
 }
 
-// Update the streak UI by recalculating the streak only if today's submission hasn't been recorded yet.
-// We use the "lastSolvedDate" flag (stored in chrome.storage) to check for repetitive submissions.
-async function updateStreakForToday(userHandle) {
-  const todayISO = new Date().toISOString().split("T")[0];
-  chrome.storage.local.get(["lastSolvedDate", "problemData"], async function(result) {
-    if (result.lastSolvedDate === todayISO) {
-      console.log("updateStreakForToday: Today's submission already recorded (flag set).");
-      return;
-    }
-    var problemData = result.problemData || [];
-    const newStreak = await recalcMonthlyStreak(userHandle, problemData);
-    console.log("updateStreakForToday: New streak calculated:", newStreak);
-    // Update the flag to prevent repetitive updates
-    chrome.storage.local.set({ lastSolvedDate: todayISO }, function() {
-      console.log("updateStreakForToday: lastSolvedDate updated to", todayISO);
-    });
-    updateStreakUI(newStreak);
-  });
+// Initialize on load
+console.log("DOMContentLoaded: Initializing calendar and submit listeners.");
+
+// Check if we're on a Codeforces page
+if (window.location.href.includes("codeforces.com")) {
+  // Wait for page to fully load
+  if (document.readyState === "complete") {
+    createCalendar();
+  } else {
+    window.addEventListener("load", createCalendar);
+  }
 }
-
-
-  console.log("DOMContentLoaded: Initializing calendar and submit listeners.");
-  createCalendar();
- 
-
