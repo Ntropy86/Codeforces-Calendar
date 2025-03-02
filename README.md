@@ -56,16 +56,13 @@
 <!-- ABOUT THE PROJECT -->
 
 ## About The Project
+Adds a Calendar View giving you Porblem of the day based on your rating with Your Monthly Streaks!
 
-[![Product Name Screen Shot][product-screenshot]](https://example.com)
-
-# Codeforces Calendar
-
-This project aims to create a calendar for Codeforces contests. It fetches contest data from the Codeforces API and displays it in a calendar format.
+<img src='./demo_image.png'>
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
-### Built With
+<!-- ### Built With -->
 
 <!--
 -   [Next.js](https://nextjs.org/)
@@ -77,10 +74,9 @@ This project aims to create a calendar for Codeforces contests. It fetches conte
 -   [Bootstrap](https://getbootstrap.com)
 -   [JQuery](https://jquery.com) -->
 
-<p align="right">(<a href="#top">back to top</a>)</p>
+<!-- <p align="right">(<a href="#top">back to top</a>)</p> -->
 
 <!-- GETTING STARTED -->
-
 ## Getting Started
 
 Please read the instructions Given below Carefully 
