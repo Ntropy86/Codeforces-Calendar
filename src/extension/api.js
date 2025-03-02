@@ -201,10 +201,10 @@ window.api = {
    */
   async verifySubmission(handle, problem) {
     try {
-      const test_mode = false; // WARNING: Set to true for testing
+      const test_mode =false ; // WARNING: Set to true for testing
+
       // Fetch recent submissions from Codeforces API
-      
-      const url = test_mode? `http://localhost:4000/test/submissions`:`https://codeforces.com/api/user.status?handle=${handle}&from=1&count=10`;      
+      const url = test_mode? `${window.config.current.API_URL}test/submissions`:`https://codeforces.com/api/user.status?handle=${handle}&from=1&count=10`;      
 
       console.log("Fetching submissions from:", url);
       
@@ -213,10 +213,13 @@ window.api = {
       if (response.status !== "OK") {
         throw new Error(`Codeforces API error: ${response.comment || 'Unknown error'}`);
       }
+
+      // console.log('API VERIFY SUBMISSIONS RESPONSE:', response.result ,response.result.length);
       
       // Check if any submission matches today's problem and is accepted
       if (response.result && response.result.length > 0) {
         for (const submission of response.result) {
+          
           const isCorrectProblem = 
             problem && 
             submission.problem.contestId === problem.problem.contestId &&
@@ -225,6 +228,8 @@ window.api = {
           const isAccepted = submission.verdict === "OK";
           
           if (isCorrectProblem && isAccepted) {
+          console.log('API VERIFY SUBMISSIONS:', submission.problem.contestId, submission.problem.index, submission.verdict);
+          console.log('API VERIFY PROBLEMS:', problem.problem.contestId, problem.problem.index);
             return {
               verified: true,
               submission: submission
