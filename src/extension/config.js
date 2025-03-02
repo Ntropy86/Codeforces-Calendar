@@ -36,16 +36,28 @@ window.errorHandler = {
   }
 };
 
-// Helper functions for working with dates
+// Update window.dateUtils to handle timezone properly
 window.dateUtils = {
   getTodayISO() {
-    return new Date().toISOString().split('T')[0];
+    // Get current date in user's local timezone
+    const now = new Date();
+    // Format to YYYY-MM-DD in local timezone
+    return this.formatDateToISO(now);
   },
   
   getYesterdayISO() {
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
-    return yesterday.toISOString().split('T')[0];
+    return this.formatDateToISO(yesterday);
+  },
+  
+  // Helper to format a date to ISO string in local timezone (YYYY-MM-DD)
+  formatDateToISO(date) {
+    const year = date.getFullYear();
+    // Add 1 to month since getMonth() is 0-indexed
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
   },
   
   getCurrentMonthAndYear() {
@@ -56,3 +68,27 @@ window.dateUtils = {
     };
   }
 };
+
+// Also add this function to the createCalendar function, right after retrieving data
+// This will log all date-related information to help debug
+function logDateDebugInfo() {
+  const now = new Date();
+  const localDate = now.toLocaleDateString();
+  const isoDate = now.toISOString();
+  const utcDate = now.toUTCString();
+  const todayISO = window.dateUtils.getTodayISO();
+  const yesterdayISO = window.dateUtils.getYesterdayISO();
+  
+  console.log("===== DATE DEBUG INFO =====");
+  console.log("Local Date:", localDate);
+  console.log("ISO Date:", isoDate);
+  console.log("UTC Date:", utcDate);
+  console.log("Today ISO (our method):", todayISO);
+  console.log("Yesterday ISO (our method):", yesterdayISO);
+  console.log("============================");
+  
+  return todayISO;
+}
+
+// Add this line at the beginning of the createCalendar function
+const todayISO = logDateDebugInfo();

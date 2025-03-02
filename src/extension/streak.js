@@ -17,6 +17,7 @@ async getCurrentStreak() {
       return 0;
     }
     
+    // Get today's date in local timezone
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
@@ -29,7 +30,8 @@ async getCurrentStreak() {
     const todayKey = `${currentYear}-${currentMonth}-${currentDay}`;
     
     // Log all the keys to help debug
-    console.log("All streak day keys:", Object.keys(streakDays));
+    const allKeys = Object.keys(streakDays);
+    console.log("All streak day keys:", allKeys);
     console.log("Today's key we're looking for:", todayKey);
     
     // Check if today is solved (either format)
@@ -38,13 +40,15 @@ async getCurrentStreak() {
     if (!isTodaySolved) {
       console.log("Today not solved, checking yesterday and previous days");
       
-      // Create yesterday's date
+      // Create yesterday's date in local timezone
       const yesterday = new Date(today);
       yesterday.setDate(yesterday.getDate() - 1);
       const yesterdayYear = yesterday.getFullYear();
       const yesterdayMonth = yesterday.getMonth() + 1;
       const yesterdayDay = yesterday.getDate();
       const yesterdayKey = `${yesterdayYear}-${yesterdayMonth}-${yesterdayDay}`;
+      
+      console.log("Yesterday's key:", yesterdayKey);
       
       // Check if yesterday is solved
       const isYesterdaySolved = streakDays[yesterdayKey] === true;
@@ -113,6 +117,55 @@ async getCurrentStreak() {
     return 0;
   }
 },
+
+/**
+ * Get dates to mark as solved based on streak_days
+ * @returns {Promise<Array<string>>} Array of ISO date strings to mark as solved
+ */
+async getDatesToMarkSolved() {
+  try {
+    // Get the streak days map
+    const streakDays = await this.getStreakDays();
+    console.log("Streak days map in getDatesToMarkSolved:", streakDays);
+    
+    if (!streakDays || Object.keys(streakDays).length === 0) {
+      console.log("No streak days found in getDatesToMarkSolved");
+      return [];
+    }
+    
+    // Get all solved days
+    const dates = [];
+    for (const [key, value] of Object.entries(streakDays)) {
+      // Only include days that are marked as solved (true)
+      if (value === true) {
+        let date;
+        
+        // Handle various date formats
+        if (key.split('-').length === 3) {
+          try {
+            // Parse the key into a date
+            const [year, month, day] = key.split('-').map(part => parseInt(part));
+            date = new Date(year, month - 1, day); // month is 0-indexed in JS Date
+            
+            if (!isNaN(date.getTime())) {
+              // Format date to ISO string in local timezone (YYYY-MM-DD)
+              const formattedDate = window.dateUtils.formatDateToISO(date);
+              dates.push(formattedDate);
+            }
+          } catch (e) {
+            console.error("Error parsing date:", key, e);
+          }
+        }
+      }
+    }
+    
+    console.log("Dates to mark based on streak days:", dates);
+    return dates;
+  } catch (error) {
+    console.error("Error getting dates to mark:", error);
+    return [];
+  }
+},
   
   /**
  * Get the streak_days map from userInfo
@@ -156,26 +209,27 @@ async getStreakDays() {
 },
   
   /**
-   * Helper function to convert a date to a streak key format
-   * @param {Date} date - The date object
-   * @returns {string} Date key in format YYYY-MM-DD
-   */
-  keyFromDate(date) {
-    const year = date.getFullYear();
-    const month = date.getMonth() + 1; // 1-indexed
-    const day = date.getDate();
-    return `${year}-${month}-${day}`;
-  },
-  
-  /**
-   * Helper function to convert a streak key to a Date object
-   * @param {string} key - The date key in YYYY-MM-DD format
-   * @returns {Date} Date object
-   */
-  dateFromKey(key) {
-    const [year, month, day] = key.split('-').map(num => parseInt(num));
-    return new Date(year, month - 1, day); // month is 0-indexed in Date
-  },
+ * Helper function to convert a date to a streak key format
+ * @param {Date} date - The date object
+ * @returns {string} Date key in format YYYY-MM-DD
+ */
+keyFromDate(date) {
+  const year = date.getFullYear();
+  const month = date.getMonth() + 1; // 1-indexed
+  const day = date.getDate();
+  return `${year}-${month}-${day}`;
+},
+
+/**
+ * Helper function to convert a streak key to a Date object
+ * @param {string} key - The date key in YYYY-MM-DD format
+ * @returns {Date} Date object
+ */
+dateFromKey(key) {
+  const [year, month, day] = key.split('-').map(num => parseInt(num));
+  // Create date in local timezone
+  return new Date(year, month - 1, day); // month is 0-indexed in Date
+},
   
   /**
    * Get the last streak date from userInfo
@@ -212,65 +266,6 @@ async getStreakDays() {
       return null;
     }
   },
-  
-  /**
-   * Get dates to mark as solved based on streak_days
-   * @returns {Promise<Array<string>>} Array of ISO date strings to mark as solved
-   */
-  /**
- * Get dates to mark as solved based on streak_days
- * @returns {Promise<Array<string>>} Array of ISO date strings to mark as solved
- */
-async getDatesToMarkSolved() {
-  try {
-    // Get the streak days map
-    const streakDays = await this.getStreakDays();
-    console.log("Streak days map in getDatesToMarkSolved:", streakDays);
-    
-    if (!streakDays || Object.keys(streakDays).length === 0) {
-      console.log("No streak days found in getDatesToMarkSolved");
-      return [];
-    }
-    
-    const today = new Date();
-    const currentYear = today.getFullYear();
-    const currentMonth = today.getMonth() + 1;
-    
-    // Get all solved days for this month
-    const dates = [];
-    for (const [key, value] of Object.entries(streakDays)) {
-      // Only include days that are marked as solved (true)
-      if (value === true) {
-        let date;
-        
-        // Handle both formats: "2025-2-28" and "2025-02-28"
-        if (key.split('-').length === 3) {
-          // It's already in YYYY-MM-DD format
-          date = new Date(key);
-        } else {
-          // Try to parse other formats
-          const parts = key.split('-');
-          if (parts.length >= 2) {
-            const year = parseInt(parts[0]);
-            const month = parseInt(parts[1]);
-            const day = parseInt(parts[2]);
-            date = new Date(year, month - 1, day);
-          }
-        }
-        
-        if (date && !isNaN(date.getTime())) {
-          dates.push(date.toISOString().split('T')[0]);
-        }
-      }
-    }
-    
-    console.log("Dates to mark based on streak days:", dates);
-    return dates;
-  } catch (error) {
-    console.error("Error getting dates to mark:", error);
-    return [];
-  }
-},
   
   /**
    * Clean up old streak days (older than 3 months)
