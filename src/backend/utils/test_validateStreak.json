@@ -5,11 +5,11 @@
     "result": [
         {
             "id": 306852115,
-            "contestId": 1426,
+            "contestId": 1431,
             "creationTimeSeconds": 1739959815,
             "relativeTimeSeconds": 2147483647,
             "problem": {
-                "contestId": 1426,
+                "contestId": 1431,
                 "index": "D",
                 "name": "Nearly Shortest Repeating Substring",
                 "type": "PROGRAMMING",

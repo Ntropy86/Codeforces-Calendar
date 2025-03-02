@@ -204,7 +204,7 @@ window.api = {
       const test_mode =false ; // WARNING: Set to true for testing
 
       // Fetch recent submissions from Codeforces API
-      const url = test_mode? `${window.config.current.API_URL}test/submissions`:`https://codeforces.com/api/user.status?handle=${handle}&from=1&count=10`;      
+      const url = test_mode? `${window.config.current.API_URL}/test/submissions`:`https://codeforces.com/api/user.status?handle=${handle}&from=1&count=10`;      
 
       console.log("Fetching submissions from:", url);
       

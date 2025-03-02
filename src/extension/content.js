@@ -3,7 +3,10 @@
  */
 
 // Track if calendar is already being refreshed to prevent loops
-let isRefreshing = false;
+// Use window property instead of local variable to avoid redeclaration errors
+if (typeof window.cfPotdIsRefreshing === 'undefined') {
+  window.cfPotdIsRefreshing = false;
+}
 
 // Define createCalendar function first before it's referenced
 async function createCalendar() {
@@ -88,12 +91,15 @@ async function createCalendar() {
       }
     }
 
-    // Only check for today's submission if we're not already refreshing the calendar
-    if (!isRefreshing && userHandle !== "Unknown") {
+    if (!window.cfPotdIsRefreshing && userHandle !== "Unknown") {
       try {
         const todayISO = window.dateUtils.getTodayISO();
+        console.log("Today's ISO date for submission check:", todayISO);
+        
         const todaysProblem = problemData.find(function(problem) {
-          return problem && problem.date && problem.date.split("T")[0] === todayISO;
+          if (!problem || !problem.date) return false;
+          const problemDate = problem.date.split("T")[0];
+          return problemDate === todayISO;
         });
         
         console.log("TODAYYYYYY", userHandle, todayISO, todaysProblem ? "Found today's problem" : "No problem for today");
@@ -159,7 +165,7 @@ async function createCalendar() {
         <tr class="user-info-row">
           <td colspan="7">
             <div class="user-info">
-              <span class="user-handle">${userHandle}</span>
+              <a href="https://codeforces.com/profile/${userHandle}" target="_blank" class="user-handle">${userHandle}</a>
               <div class="streak-container">
                 <span class="streak-flame">🔥</span>
                 <span id="calendar-streak" class="streak-count">${streakCount}</span>
@@ -189,9 +195,9 @@ async function createCalendar() {
       calendarHTML += "<tr>";
       for (let j = 0; j < 7; j++) {
         if (i === 0 && j < firstDay) {
-          calendarHTML += "<td></td>";
+          calendarHTML += "<td></td>"; // Empty cell, no content
         } else if (day > daysInMonth) {
-          break;
+          calendarHTML += "<td></td>"; // Empty cell for days beyond this month
         } else {
           const formattedMonth = displayMonth.toString().padStart(2, "0");
           const formattedDay = day.toString().padStart(2, "0");
@@ -231,7 +237,10 @@ async function createCalendar() {
         }
       }
       calendarHTML += "</tr>";
-      if (day > daysInMonth) break;
+      if (day > daysInMonth && i < 5) {
+        // Add empty row at the end if needed for consistent layout
+        calendarHTML += "<tr>" + "<td></td>".repeat(7) + "</tr>";
+      }
     }
     calendarHTML += "</table></div>";
 
@@ -266,7 +275,7 @@ async function createCalendar() {
     window.errorHandler.logError('createCalendar', error);
   } finally {
     // Reset the refreshing flag
-    isRefreshing = false;
+    window.cfPotdIsRefreshing = false;
   }
   
   // Mark calendar based on streak data
@@ -278,13 +287,13 @@ window.refreshCalendar = function() {
   console.log("Refreshing calendar due to streak changes");
   
   // If already refreshing, don't start another refresh
-  if (isRefreshing) {
+  if (window.cfPotdIsRefreshing) {
     console.log("Calendar refresh already in progress, skipping");
     return;
   }
   
   // Set the refreshing flag to prevent loops
-  isRefreshing = true;
+  window.cfPotdIsRefreshing = true;
   
   // Get the existing calendar and remove it
   const existingCalendar = document.querySelector(".cf-potd-container");
@@ -353,6 +362,8 @@ async function updateStreakAfterVerification(userHandle, todaysProblem) {
 function markCalendarTick() {
   console.log("markCalendarTick: Marking today's cell as solved.");
   const todayISO = window.dateUtils.getTodayISO();
+  console.log("Today's ISO date for markCalendarTick:", todayISO);
+  
   const calendarCells = document.querySelectorAll(".calendar td");
   
   calendarCells.forEach(function(cell) {
