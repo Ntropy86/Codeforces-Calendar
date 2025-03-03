@@ -89,8 +89,6 @@ So There are two main Parts where you can contribute
 
 - Make sure you are using a Browser running Chromium V108 and above
 
-
-
 <!-- CONTRIBUTING -->
 
 ## Contributing

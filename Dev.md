@@ -53,6 +53,10 @@ The application follows a layered architecture:
 - `GET /problemset/daily` - Get problem for a specific day and rating
 - `GET /problemset/monthly` - Get problems for the entire month
 
+
+## Cron Documentation
+All the cron jobs that are running can be found here: [Cronjobs documentation](./cron.md)
+
 ## Running the Application
 
 1. Install dependencies: `npm install`
