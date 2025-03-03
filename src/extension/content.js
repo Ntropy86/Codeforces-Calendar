@@ -12,6 +12,8 @@ if (typeof window.cfPotdIsRefreshing === 'undefined') {
 async function createCalendar() {
   console.log("createCalendar: Called");
   try {
+    window.dateUtils.logDateDebugInfo();
+    
     const currentDate = new Date();
     const slicedDate = currentDate.toISOString().split("T")[0];
     console.log("Current date (ISO):", slicedDate);

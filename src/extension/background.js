@@ -116,25 +116,42 @@ chrome.tabs.onUpdated.addListener(function(tabId, changeInfo, tab) {
 
 // Set up periodic tasks using Chrome's alarm API
 function setupPeriodicTasks() {
-  // Check streak status every 6 hours (4 times a day)
-  chrome.alarms.create('checkStreakStatus', { periodInMinutes: 360 });
-  
-  // Check submissions and update streak every hour
-  chrome.alarms.create('checkSubmissions', { periodInMinutes: 60 });
-  
-  console.log("Periodic tasks scheduled");
+  // Safely check if the alarms API is available
+  if (typeof chrome !== 'undefined' && chrome.alarms) {
+    try {
+      // Check streak status every 6 hours (4 times a day)
+      chrome.alarms.create('checkStreakStatus', { periodInMinutes: 360 });
+      
+      // Check submissions and update streak every hour
+      chrome.alarms.create('checkSubmissions', { periodInMinutes: 60 });
+      
+      console.log("Periodic tasks scheduled");
+    } catch (error) {
+      console.error("Error setting up alarms:", error);
+    }
+  } else {
+    console.error("Chrome alarms API is not available");
+  }
 }
 
-// Listen for alarm events
-chrome.alarms.onAlarm.addListener(async (alarm) => {
-  console.log(`Alarm triggered: ${alarm.name}`);
-  
-  if (alarm.name === 'checkStreakStatus') {
-    await handleStreakStatusCheck();
-  } else if (alarm.name === 'checkSubmissions') {
-    await handleSubmissionCheck();
+// Safely set up alarm listener
+if (typeof chrome !== 'undefined' && chrome.alarms && chrome.alarms.onAlarm) {
+  try {
+    // Listen for alarm events
+    chrome.alarms.onAlarm.addListener(async (alarm) => {
+      console.log(`Alarm triggered: ${alarm.name}`);
+      
+      if (alarm.name === 'checkStreakStatus') {
+        await handleStreakStatusCheck();
+      } else if (alarm.name === 'checkSubmissions') {
+        await handleSubmissionCheck();
+      }
+    });
+    console.log("Alarm listener registered");
+  } catch (error) {
+    console.error("Error setting up alarm listener:", error);
   }
-});
+}
 
 // Handle streak status check
 async function handleStreakStatusCheck() {
@@ -303,50 +320,64 @@ async function handleSubmissionCheck() {
   }
 }
 
+// Expose debug functions for testing
 function exposeDebugFunctions() {
-  window.debugExtension = {
-    triggerStreakCheck: () => {
-      console.log("Manually triggering streak check...");
-      return handleStreakStatusCheck();
-    },
+  // Only expose if we're in a context where window is defined
+  if (typeof window !== 'undefined') {
+    window.debugExtension = {
+      triggerStreakCheck: () => {
+        console.log("Manually triggering streak check...");
+        return handleStreakStatusCheck();
+      },
+      
+      triggerSubmissionCheck: () => {
+        console.log("Manually triggering submission check...");
+        return handleSubmissionCheck();
+      },
+      
+      checkAlarmStatus: async () => {
+        if (chrome.alarms) {
+          const alarms = await chrome.alarms.getAll();
+          console.log("Current active alarms:", alarms);
+          return alarms;
+        } else {
+          console.error("Chrome alarms API is not available");
+          return [];
+        }
+      },
+      
+      resetAlarms: () => {
+        if (chrome.alarms) {
+          // Clear all alarms
+          chrome.alarms.clearAll();
+          // Set up again
+          setupPeriodicTasks();
+          console.log("Alarms reset");
+        } else {
+          console.error("Chrome alarms API is not available");
+        }
+      }
+    };
     
-    triggerSubmissionCheck: () => {
-      console.log("Manually triggering submission check...");
-      return handleSubmissionCheck();
-    },
-    
-    checkAlarmStatus: async () => {
-      const alarms = await chrome.alarms.getAll();
-      console.log("Current active alarms:", alarms);
-      return alarms;
-    },
-    
-    resetAlarms: () => {
-      // Clear all alarms
-      chrome.alarms.clearAll();
-      // Set up again
-      setupPeriodicTasks();
-      console.log("Alarms reset");
-    }
-  };
-  
-  console.log("Debug functions available via window.debugExtension");
+    console.log("Debug functions available via window.debugExtension");
+  }
 }
 
+// Safely expose debug functions
+try {
+  exposeDebugFunctions();
+} catch (error) {
+  console.error("Error exposing debug functions:", error);
+}
 
-
-
-
-exposeDebugFunctions(); 
-
-// window.debugExtension.triggerStreakCheck();
-// window.debugExtension.triggerSubmissionCheck();
-// window.debugExtension.checkAlarmStatus();
-// window.debugExtension.resetAlarms();
-
-
-// Set up periodic tasks when the extension starts
-chrome.runtime.onStartup.addListener(setupPeriodicTasks);
+// Set up periodic tasks when the extension starts (if possible)
+if (chrome.runtime && chrome.runtime.onStartup) {
+  chrome.runtime.onStartup.addListener(() => {
+    console.log("Extension starting up, setting up periodic tasks");
+    setupPeriodicTasks();
+  });
+}
 
 // Also set up tasks when the service worker is initialized
+console.log("Background script initialized, setting up periodic tasks");
 setupPeriodicTasks();
