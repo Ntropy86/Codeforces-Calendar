@@ -125,6 +125,9 @@ function setupPeriodicTasks() {
       // Check submissions and update streak every hour
       chrome.alarms.create('checkSubmissions', { periodInMinutes: 60 });
       
+      // Refresh problem data and user info every 12 hours
+      chrome.alarms.create('refreshData', { periodInMinutes: 720 });
+      
       console.log("Periodic tasks scheduled");
     } catch (error) {
       console.error("Error setting up alarms:", error);
@@ -145,6 +148,8 @@ if (typeof chrome !== 'undefined' && chrome.alarms && chrome.alarms.onAlarm) {
         await handleStreakStatusCheck();
       } else if (alarm.name === 'checkSubmissions') {
         await handleSubmissionCheck();
+      } else if (alarm.name === 'refreshData') {
+        await handleDataRefresh();
       }
     });
     console.log("Alarm listener registered");
@@ -320,6 +325,193 @@ async function handleSubmissionCheck() {
   }
 }
 
+// Handle data refresh
+async function handleDataRefresh() {
+  try {
+    console.log('Running scheduled data refresh');
+    
+    // Get user data
+    const userData = await new Promise(resolve => {
+      chrome.storage.local.get(['userData'], resolve);
+    });
+    
+    if (!userData.userData || !userData.userData.username) {
+      console.log("No user data found, skipping data refresh");
+      return;
+    }
+    
+    const userHandle = userData.userData.username;
+    
+    // We need to inject the scripts to use API functions
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab && tab.url && tab.url.includes('codeforces.com')) {
+      // Inject required scripts
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ["config.js", "storage.js", "api.js", "streak.js"]
+      });
+      
+      // Execute data refresh in the context of the tab
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: async (handle) => {
+          try {
+            // Get user info from backend
+            const userData = await window.api.getOrCreateUser(handle);
+            await window.storage.set(window.storageKeys.USER_INFO, [userData]);
+            
+            // Get current month and year
+            const { month, year } = window.dateUtils.getCurrentMonthAndYear();
+            
+            // Get user rating
+            const userRating = userData.rating || 1200;
+            
+            // Get problems for current month and user's rating
+            const problemsData = await window.api.getMonthlyProblems(month, year, userRating);
+            
+            // Format and store the problems
+            const formattedProblems = formatProblems(problemsData, month, year, userRating);
+            await window.storage.set(window.storageKeys.PROBLEM_DATA, formattedProblems);
+            
+            console.log("Data refresh completed successfully");
+            return { success: true };
+          } catch (error) {
+            console.error('Error in data refresh:', error);
+            return { success: false, error: error.message };
+          }
+          
+          // Helper function to format problems
+          function formatProblems(problemsData, currentMonth, currentYear, userRating) {
+            let formattedProblems = [];
+          
+            // Format 1: Direct array of problems
+            if (problemsData && Array.isArray(problemsData)) {
+              formattedProblems = problemsData.map(problem => {
+                const date = new Date(currentYear, currentMonth - 1, problem.day);
+                return {
+                  date: date.toISOString(),
+                  problem: extractProblemIdParts(problem.problemID) || {
+                    contestId: parseInt(problem.problemID),
+                    index: "A"
+                  },
+                  url: problem.problemURL
+                };
+              });
+            }
+            // Format 2: Problems in a ratings structure
+            else if (problemsData && problemsData.ratings && problemsData.ratings[userRating]) {
+              const problems = problemsData.ratings[userRating];
+              Object.entries(problems).forEach(([day, problem]) => {
+                const date = new Date(currentYear, currentMonth - 1, parseInt(day));
+                formattedProblems.push({
+                  date: date.toISOString(),
+                  problem: extractProblemIdParts(problem.problemID) || {
+                    contestId: parseInt(problem.problemID),
+                    index: "A"
+                  },
+                  url: problem.problemURL
+                });
+              });
+            }
+            // Format 3: Problems inside nested data property
+            else if (problemsData && problemsData.problems && Array.isArray(problemsData.problems)) {
+              formattedProblems = problemsData.problems.map(problem => {
+                const date = new Date(currentYear, currentMonth - 1, problem.day);
+                return {
+                  date: date.toISOString(),
+                  problem: extractProblemIdParts(problem.problemID) || {
+                    contestId: parseInt(problem.problemID),
+                    index: "A"
+                  },
+                  url: problem.problemURL
+                };
+              });
+            }
+            // Format 4: Data wrapper with nested formats
+            else if (problemsData && problemsData.data) {
+              if (Array.isArray(problemsData.data)) {
+                formattedProblems = problemsData.data.map(problem => {
+                  const date = new Date(currentYear, currentMonth - 1, problem.day);
+                  return {
+                    date: date.toISOString(),
+                    problem: extractProblemIdParts(problem.problemID) || {
+                      contestId: parseInt(problem.problemID),
+                      index: "A"
+                    },
+                    url: problem.problemURL
+                  };
+                });
+              }
+              else if (problemsData.data.problems && Array.isArray(problemsData.data.problems)) {
+                formattedProblems = problemsData.data.problems.map(problem => {
+                  const date = new Date(currentYear, currentMonth - 1, problem.day);
+                  return {
+                    date: date.toISOString(),
+                    problem: extractProblemIdParts(problem.problemID) || {
+                      contestId: parseInt(problem.problemID),
+                      index: "A"
+                    },
+                    url: problem.problemURL
+                  };
+                });
+              }
+              else if (problemsData.data.ratings && problemsData.data.ratings[userRating]) {
+                const problems = problemsData.data.ratings[userRating];
+                Object.entries(problems).forEach(([day, problem]) => {
+                  const date = new Date(currentYear, currentMonth - 1, parseInt(day));
+                  formattedProblems.push({
+                    date: date.toISOString(),
+                    problem: extractProblemIdParts(problem.problemID) || {
+                      contestId: parseInt(problem.problemID),
+                      index: "A"
+                    },
+                    url: problem.problemURL
+                  });
+                });
+              }
+            }
+            
+            return formattedProblems;
+          }
+          
+          // Helper function to extract problem ID parts
+          function extractProblemIdParts(problemId) {
+            const match = problemId.match(/(\d+)([A-Z]\d*)/);
+            if (match) {
+              return {
+                contestId: parseInt(match[1]),
+                index: match[2]
+              };
+            }
+            return null;
+          }
+        },
+        args: [userHandle]
+      });
+      
+      // Notify the user that data has been refreshed
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => {
+          // If we have a notification function, use it
+          if (window.cfPotdShowNotification) {
+            window.cfPotdShowNotification("Problem data and user info refreshed", true);
+          }
+          
+          // If we have a calendar refresh function, use it
+          if (window.refreshCalendar) {
+            window.refreshCalendar();
+          }
+        }
+      });
+    } else {
+      console.log("No active Codeforces tab found, skipping data refresh");
+    }
+  } catch (error) {
+    console.error('Error in scheduled data refresh:', error);
+  }
+}
+
 // Expose debug functions for testing
 function exposeDebugFunctions() {
   // Only expose if we're in a context where window is defined
@@ -333,6 +525,11 @@ function exposeDebugFunctions() {
       triggerSubmissionCheck: () => {
         console.log("Manually triggering submission check...");
         return handleSubmissionCheck();
+      },
+      
+      triggerDataRefresh: () => {
+        console.log("Manually triggering data refresh...");
+        return handleDataRefresh();
       },
       
       checkAlarmStatus: async () => {
