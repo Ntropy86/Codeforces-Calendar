@@ -199,7 +199,7 @@ async function sequence(handle) {
     }
     
     // Get user rating
-    const userRating = userData.rating || 800; // Default to 1200 if rating isn't available
+    let userRating = userData.rating || 800; // Default to 1200 if rating isn't available
     const offset = 200;
     userRating = userRating / 100 * 100 + 100 + offset;
     // Get current date for month and year
