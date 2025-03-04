@@ -36,22 +36,31 @@ window.errorHandler = {
   }
 };
 
-// Update window.dateUtils to handle timezone properly
+// Update window.dateUtils to handle timezone properly using UTC
 window.dateUtils = {
   getTodayISO() {
-    // Get current date in user's local timezone
+    // Get current date in UTC
     const now = new Date();
-    // Format to YYYY-MM-DD in local timezone
-    return this.formatDateToISO(now);
+    // Format to YYYY-MM-DD in UTC timezone
+    return this.formatDateToUTCISO(now);
   },
   
   getYesterdayISO() {
     const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    return this.formatDateToISO(yesterday);
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1); // Use UTC date
+    return this.formatDateToUTCISO(yesterday);
   },
   
-  // Helper to format a date to ISO string in local timezone (YYYY-MM-DD)
+  // Helper to format a date to ISO string in UTC timezone (YYYY-MM-DD)
+  formatDateToUTCISO(date) {
+    const year = date.getUTCFullYear();
+    // Add 1 to month since getMonth() is 0-indexed
+    const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+    const day = date.getUTCDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  },
+  
+  // Keep original local timezone method for legacy code that might need it
   formatDateToISO(date) {
     const year = date.getFullYear();
     // Add 1 to month since getMonth() is 0-indexed
@@ -61,10 +70,11 @@ window.dateUtils = {
   },
   
   getCurrentMonthAndYear() {
+    // Use UTC for consistency across timezones
     const today = new Date();
     return {
-      month: today.getMonth() + 1, // 1-indexed month
-      year: today.getFullYear()
+      month: today.getUTCMonth() + 1, // 1-indexed month
+      year: today.getUTCFullYear()
     };
   },
   
@@ -81,8 +91,8 @@ window.dateUtils = {
     console.log("Local Date:", localDate);
     console.log("ISO Date:", isoDate);
     console.log("UTC Date:", utcDate);
-    console.log("Today ISO (our method):", todayISOFromUtils);
-    console.log("Yesterday ISO (our method):", yesterdayISO);
+    console.log("Today ISO (UTC method):", todayISOFromUtils);
+    console.log("Yesterday ISO (UTC method):", yesterdayISO);
     console.log("============================");
     
     return todayISOFromUtils;

@@ -15,11 +15,11 @@ async function createCalendar() {
     window.dateUtils.logDateDebugInfo();
     
     const currentDate = new Date();
-    const slicedDate = currentDate.toISOString().split("T")[0];
-    console.log("Current date (ISO):", slicedDate);
+    const slicedDate = window.dateUtils.getTodayISO(); // Use the updated UTC method
+    console.log("Current date (ISO UTC):", slicedDate);
 
-    const currentYear = currentDate.getFullYear();
-    const currentMonth = currentDate.getMonth();
+    const currentYear = currentDate.getUTCFullYear(); // Use UTC year
+    const currentMonth = currentDate.getUTCMonth(); // Use UTC month
     const displayMonth = currentMonth + 1; // Adjust for display
 
     const monthNames = [
@@ -95,7 +95,7 @@ async function createCalendar() {
 
     if (!window.cfPotdIsRefreshing && userHandle !== "Unknown") {
       try {
-        const todayISO = window.dateUtils.getTodayISO();
+        const todayISO = window.dateUtils.getTodayISO(); // This now uses the UTC method
         console.log("Today's ISO date for submission check:", todayISO);
         
         const todaysProblem = problemData.find(function(problem) {
@@ -187,11 +187,11 @@ async function createCalendar() {
         </tr>
     `;
 
-    // Determine first day and number of days in the month
-    const firstDay = new Date(currentYear, currentMonth, 1).getDay();
-    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    // Determine first day and number of days in the month using UTC
+    const firstDay = new Date(Date.UTC(currentYear, currentMonth, 1)).getUTCDay();
+    const daysInMonth = new Date(Date.UTC(currentYear, currentMonth + 1, 0)).getUTCDate();
     let day = 1;
-    const referenceDate = currentDate.getDate(); // today's day-of-month
+    const referenceDate = currentDate.getUTCDate(); // today's day-of-month in UTC
 
     for (let i = 0; i < 6; i++) {
       calendarHTML += "<tr>";

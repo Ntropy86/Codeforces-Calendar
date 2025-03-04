@@ -1,26 +1,6 @@
-const mongoose = require("mongoose");
-const Models = require("../models/models");
-const User = new mongoose.model("User", Models.userSchema);
+// These are the methods that need to be updated in userService.js
+// Replace the existing implementations with these UTC-based versions
 
-/**
- * Find user by ID
- * @param {string} userID - The user ID to search for
- * @returns {Promise} - Promise resolving to user object or null
- */
-const findUserByID = async (userID) => {
-    try {
-        const user = await User.find({ userID: userID });
-        return user;
-    } catch (error) {
-        throw error;
-    }
-};
-
-/**
- * Create a new user
- * @param {string} userID - The Codeforces user handle
- * @returns {Promise} - Promise resolving to newly created user
- */
 const createUser = async (userID) => {
     try {
         // Check if user already exists
@@ -43,11 +23,12 @@ const createUser = async (userID) => {
         const userRating = user.rating;
 
         // Create streak_days with all days of the current month set to false
+        // Using UTC dates for consistency across timezones
         const streak_days = {};
         const today = new Date();
-        const year = today.getFullYear();
-        const month = today.getMonth() + 1; // 1-indexed month
-        const daysInMonth = new Date(year, month, 0).getDate();
+        const year = today.getUTCFullYear(); // Use UTC year
+        const month = today.getUTCMonth() + 1; // Use UTC month (1-indexed)
+        const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
         
         // Populate all days in the current month
         for (let day = 1; day <= daysInMonth; day++) {
@@ -73,18 +54,11 @@ const createUser = async (userID) => {
     }
 };
 
-/**
- * Update a specific day's streak status
- * @param {string} userID - The user ID
- * @param {number} day - The day of the month
- * @param {boolean} solved - Whether the day is solved
- * @returns {Promise} - Promise resolving to updated user
- */
 const updateUserStreakDay = async (userID, day, solved = true) => {
     try {
         const date = new Date();
-        const monthDay = day || date.getDate();
-        const monthKey = `${date.getFullYear()}-${date.getMonth() + 1}`;
+        const monthDay = day || date.getUTCDate();  // Use UTC date
+        const monthKey = `${date.getUTCFullYear()}-${date.getUTCMonth() + 1}`;  // Use UTC
         const dayKey = `${monthKey}-${monthDay}`;
         
         // Use dot notation for the update to set a specific day in the Map
@@ -107,16 +81,11 @@ const updateUserStreakDay = async (userID, day, solved = true) => {
     }
 };
 
-/**
- * Reset all streak days for the current month
- * @param {string} userID - The user ID
- * @returns {Promise} - Promise resolving to updated user
- */
 const resetUserStreakDays = async (userID) => {
     try {
         const date = new Date();
-        const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-        const monthKey = `${date.getFullYear()}-${date.getMonth() + 1}`;
+        const daysInMonth = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+        const monthKey = `${date.getUTCFullYear()}-${date.getUTCMonth() + 1}`;
         
         // Create an update query to clear all days
         const updateQuery = {};
@@ -141,13 +110,6 @@ const resetUserStreakDays = async (userID) => {
     }
 };
 
-/**
- * Update user streak
- * @param {string} userID - The user ID
- * @param {number} lastStreakCount - The current streak count
- * @param {boolean} updateDate - Whether to update the last_streak_date (default: false)
- * @returns {Promise} - Promise resolving to updated user
- */
 const updateUserStreak = async (userID, lastStreakCount, updateDate = false) => {
     try {
         const streak_count = parseInt(lastStreakCount);
@@ -174,11 +136,11 @@ const updateUserStreak = async (userID, lastStreakCount, updateDate = false) => 
         
         // For continuing streak or if we're validating a new solve, mark today as solved
         if (!isReset || updateDate) {
-            // Mark today as solved
+            // Mark today as solved using UTC date
             const today = new Date();
-            const year = today.getFullYear();
-            const month = today.getMonth() + 1;
-            const day = today.getDate();
+            const year = today.getUTCFullYear();
+            const month = today.getUTCMonth() + 1;
+            const day = today.getUTCDate();
             const dayKey = `${year}-${month}-${day}`;
             
             updateFields[`streak.streak_days.${dayKey}`] = true;
@@ -201,11 +163,6 @@ const updateUserStreak = async (userID, lastStreakCount, updateDate = false) => 
     }
 };
 
-/**
- * Clean up old streak days (older than 3 months)
- * @param {string} userID - The user ID
- * @returns {Promise} - Promise resolving to updated user
- */
 const cleanupOldStreakDays = async (userID) => {
     try {
         // Get the user to access their streak days
@@ -214,14 +171,15 @@ const cleanupOldStreakDays = async (userID) => {
             throw new Error("User or streak days not found");
         }
         
-        // Calculate the date 3 months ago
+        // Calculate the date 3 months ago using UTC
         const threeMonthsAgo = new Date();
-        threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+        threeMonthsAgo.setUTCMonth(threeMonthsAgo.getUTCMonth() - 3);
         
         // Helper to convert streak day key to date
         const dateFromKey = (key) => {
             const [year, month, day] = key.split('-').map(num => parseInt(num));
-            return new Date(year, month - 1, day); // month is 0-indexed in Date
+            const date = new Date(Date.UTC(year, month - 1, day)); // month is 0-indexed in Date
+            return date;
         };
         
         const streakDays = user.streak.streak_days;
@@ -256,56 +214,4 @@ const cleanupOldStreakDays = async (userID) => {
         console.error("Error cleaning up old streak days:", error);
         throw error;
     }
-};
-
-/**
- * Update user based on the attribute sent in the request body
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- * @returns {Promise<void>}
- */
-const updateUser = async (req, res) => {
-    try {
-        const userID = req.body.userID;
-        const update = req.body.update;
-
-        if (!userID) {
-            return res.status(400).json("UserID is required");
-        }
-
-        if (!update) {
-            return res.status(400).json("Update is required");
-        }
-
-        const updatedUser = await User.findOneAndUpdate(
-            { userID: userID },
-            { 
-                $set: update
-            },
-            { new: true }
-        );
-
-        if(updatedUser === null) {
-            return res.status(404).json("User not found");
-        }
-
-        res.status(200).json({
-            "message": "User updated successfully",
-            "user": updatedUser
-        });
-    } catch (err) {
-        console.error("Error in updateUser:", err);
-        res.status(500).json({
-            "message": err.message || "Internal server error"
-        });
-    }
-};
-
-module.exports = {
-    findUserByID,
-    createUser,
-    updateUserStreak,
-    updateUserStreakDay,
-    resetUserStreakDays,
-    cleanupOldStreakDays
 };

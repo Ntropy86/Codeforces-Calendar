@@ -1,188 +1,13 @@
-const mongoose = require("mongoose");
-const Models = require("../models/models");
-const FilteredProblemSet = new mongoose.model("FilteredProblemSet", Models.filteredProblemSetSchema);
-const globalProblemSetService = require("./globalProblemSetService");
+// These are the methods that need to be updated in filteredProblemSetService.js
+// Replace the existing implementations with these UTC-based versions
 
-// Define the rating categories as a constant for reuse
-const RATING_CATEGORIES = [
-    600, 800, 1000, 1200, 1300, 1400, 1500, 1600, 
-    1700, 1800, 1900, 2000, 2100, 2200, 2300, 2400, 
-    2500, 2600, 2700, 2800, 2900, 3000, 3100, 3200, 3300, 3400, 3500
-];
-
-/**
- * Get all rating categories
- * @returns {Array} Array of rating categories
- */
-const getRatingCategories = () => {
-    return RATING_CATEGORIES;
-};
-
-/**
- * Find the filtered problem set for a specific month and year
- * @param {number} month - Month (0-11 for JavaScript Date, but stored as 1-12 in database)
- * @param {number} year - Year
- * @returns {Promise<Object>} The filtered problem set document or null if not found
- */
-const findFilteredProblemSet = async (month, year) => {
-    try {
-        // Add 1 to month because we store months as 1-12 in database
-        const dbMonth = month + 1;
-        console.log(`Looking for filtered problem set for month: ${dbMonth}, year: ${year}`);
-        return await FilteredProblemSet.findOne({ month: dbMonth, year });
-    } catch (error) {
-        throw error;
-    }
-};
-
-/**
- * Create a new filtered problem set for a specific month and year
- * @param {number} month - Month (0-11 for JavaScript Date, but stored as 1-12 in database)
- * @param {number} year - Year
- * @returns {Promise<Object>} The newly created filtered problem set document
- */
-const createFilteredProblemSet = async (month, year) => {
-    try {
-        // Add 1 to month because we store months as 1-12 in database
-        const dbMonth = month + 1;
-        console.log(`Creating new filtered problem set for month: ${dbMonth}, year: ${year}`);
-        const newFilteredProblemSet = new FilteredProblemSet({
-            month: dbMonth,
-            year,
-            problems: new Map()
-        });
-        
-        return await newFilteredProblemSet.save();
-    } catch (error) {
-        throw error;
-    }
-};
-
-/**
- * Find or create a filtered problem set for a specific month and year
- * @param {number} month - Month (0-11 for JavaScript Date, but stored as 1-12 in database)
- * @param {number} year - Year
- * @returns {Promise<Object>} The filtered problem set document
- */
-const findOrCreateFilteredProblemSet = async (month, year) => {
-    try {
-        let filteredProblemSet = await findFilteredProblemSet(month, year);
-        
-        if (!filteredProblemSet) {
-            // Add 1 to month for display in log (1-12)
-            console.log(`No filtered problem set found for ${month + 1}/${year}. Creating a new one.`);
-            filteredProblemSet = await createFilteredProblemSet(month, year);
-        }
-        
-        return filteredProblemSet;
-    } catch (error) {
-        throw error;
-    }
-};
-
-/**
- * Clear filtered problem set for a specific month and year
- * @param {number} month - Month (0-11 for JavaScript Date, but stored as 1-12 in database)
- * @param {number} year - Year
- * @returns {Promise<Object>} Result of the delete operation
- */
-const clearFilteredProblemSet = async (month, year) => {
-    try {
-        // Add 1 to month because we store months as 1-12 in database
-        const dbMonth = month + 1;
-        console.log(`Clearing filtered problem set for month: ${dbMonth}, year: ${year}`);
-        return await FilteredProblemSet.deleteOne({ month: dbMonth, year });
-    } catch (error) {
-        throw error;
-    }
-};
-
-/**
- * Get monthly problems for a specific rating
- * @param {number} month - Month (0-11 for JavaScript Date, but stored as 1-12 in database)
- * @param {number} year - Year
- * @param {number} rating - Problem rating
- * @returns {Promise<Array>} Array of problems for the month
- */
-const getMonthlyProblemsForRating = async (month, year, rating) => {
-    try {
-        // Add 1 to month because we store months as 1-12 in database
-        const dbMonth = month + 1;
-        const filteredProblemSet = await findFilteredProblemSet(month, year);
-        
-        if (!filteredProblemSet) {
-            return [];
-        }
-        
-        return filteredProblemSet.problems.get(rating.toString()) || [];
-    } catch (error) {
-        throw error;
-    }
-};
-
-/**
- * Find the closest available rating that has unused problems
- * @param {number} targetRating - The target rating to find problems for
- * @param {number} count - Number of problems needed
- * @returns {Promise<{rating: number, problems: Array}>} The closest rating and its problems
- */
-const findClosestAvailableRating = async (targetRating, count) => {
-    try {
-        console.log(`Finding closest available rating to ${targetRating} with at least ${count} problems`);
-        
-        // Get all ratings defined in the system
-        const ratings = RATING_CATEGORIES;
-        
-        // Sort ratings by distance from target rating
-        const sortedRatings = [...ratings].sort((a, b) => {
-            return Math.abs(a - targetRating) - Math.abs(b - targetRating);
-        });
-        
-        console.log(`Sorted ratings by distance from ${targetRating}:`, sortedRatings);
-        
-        // Try each rating in order of closest to farthest
-        for (const rating of sortedRatings) {
-            if (rating === targetRating) continue; // Skip the target rating, we already tried it
-            
-            // Reset the rating first to ensure all problems are available
-            await globalProblemSetService.resetProblemUsedFlagByRating(rating);
-            
-            // Try to find problems with this rating
-            const problems = await globalProblemSetService.findUnusedProblemsByRating(rating, count);
-            
-            if (problems.length >= count) {
-                console.log(`Found ${problems.length} problems with rating ${rating} as a fallback for ${targetRating}`);
-                return {
-                    rating,
-                    problems
-                };
-            }
-            
-            console.log(`Rating ${rating} only has ${problems.length} problems, need ${count}`);
-        }
-        
-        // If we get here, we couldn't find any rating with enough problems
-        console.log(`Could not find any rating with ${count} unused problems`);
-        return {
-            rating: null,
-            problems: []
-        };
-    } catch (error) {
-        console.error(`Error finding closest available rating:`, error);
-        throw error;
-    }
-};
-
-/**
- * Generate filtered problem sets for each rating
- * @returns {Promise<Object>} Statistics about the generation process
- */
 const generateFilteredProblemSets = async () => {
     try {
+        // Use UTC for consistent date handling across timezones
         const today = new Date();
-        const currentDay = today.getDate();
-        const currentMonth = today.getMonth(); // Month is 0-indexed in JS Date (0-11)
-        const currentYear = today.getFullYear();
+        const currentDay = today.getUTCDate();  // Use UTC date
+        const currentMonth = today.getUTCMonth();  // Month is 0-indexed in JS Date (0-11)
+        const currentYear = today.getUTCFullYear();  // Use UTC year
         
         console.log(`Running filtered problem set generation for date: ${today.toISOString().split('T')[0]}`);
         
@@ -265,13 +90,8 @@ const generateFilteredProblemSets = async () => {
     }
 };
 
-/**
- * Helper function to populate a problem set for specified days
- * @param {Object} problemSet - The problem set document to populate
- * @param {number} upToDay - Populate problems up to this day
- * @param {Object} stats - Stats object to update
- * @returns {Promise<void>}
- */
+// Helper function to populate a problem set for specified days
+// This function doesn't need to be changed much, but ensure the date creation is UTC-based
 const populateProblemSet = async (problemSet, upToDay, stats) => {
     // For each rating category, add problems for days that need to be populated
     for (const rating of RATING_CATEGORIES) {
@@ -383,13 +203,7 @@ const populateProblemSet = async (problemSet, upToDay, stats) => {
     await problemSet.save();
 };
 
-/**
- * Get all problems for a specific month, year and rating
- * @param {number} month - Month (1-12 as received from client)
- * @param {number} year - Year
- * @param {number} rating - Problem rating (optional)
- * @returns {Promise<Object>} Object with problems organized by rating
- */
+// Update getMonthlyProblems to use UTC date handling
 const getMonthlyProblems = async (month, year, rating = null) => {
     try {
         // Convert month from 1-12 (client format) to 0-11 (JS Date format)
@@ -437,14 +251,4 @@ const getMonthlyProblems = async (month, year, rating = null) => {
     } catch (error) {
         throw error;
     }
-};
-
-module.exports = {
-    getRatingCategories,
-    findFilteredProblemSet,
-    findOrCreateFilteredProblemSet,
-    clearFilteredProblemSet,
-    getMonthlyProblemsForRating,
-    generateFilteredProblemSets,
-    getMonthlyProblems
 };
