@@ -16,7 +16,7 @@ console.log('Initializing scheduled jobs...');
  * Update global problem set daily at 1:00 AM
  * This job fetches new problems from Codeforces API and updates the database
  */
-cron.schedule('0 1 * * *', async () => {
+cron.schedule('55 4 * * *', async () => {
   try {
     console.log('[CRON] Running scheduled global problem set update');
     const stats = await globalProblemSetService.updateGlobalProblemSet();
@@ -24,6 +24,10 @@ cron.schedule('0 1 * * *', async () => {
   } catch (error) {
     console.error('[CRON] Error in scheduled global problem set update:', error);
   }
+},
+{
+  scheduled: true,
+  timezone: "Asia/Kolkata"  // Explicitly set to IST
 });
 
 /**
@@ -31,7 +35,7 @@ cron.schedule('0 1 * * *', async () => {
  * This job ensures that problems are populated for the current day
  * It also prepares problems for the next month when approaching month-end
  */
-cron.schedule('0 2 * * *', async () => {
+cron.schedule('0 5 * * *', async () => {
   try {
     console.log('[CRON] Running daily problem set generation/update');
     const stats = await filteredProblemSetService.generateFilteredProblemSets();
@@ -39,13 +43,17 @@ cron.schedule('0 2 * * *', async () => {
   } catch (error) {
     console.error('[CRON] Error in daily problem set generation:', error);
   }
+},
+{
+  scheduled: true,
+  timezone: "Asia/Kolkata"  // Explicitly set to IST
 });
 
 /**
  * Clean up old streak data weekly on Sunday at 3:00 AM
  * This job removes streak data older than 3 months to keep the database efficient
  */
-cron.schedule('0 3 * * 0', async () => {
+cron.schedule('05 5 * * 0', async () => {
   try {
     console.log('[CRON] Running scheduled streak data cleanup');
     
@@ -73,6 +81,10 @@ cron.schedule('0 3 * * 0', async () => {
   } catch (error) {
     console.error('[CRON] Error in scheduled streak data cleanup:', error);
   }
+},
+{
+  scheduled: true,
+  timezone: "Asia/Kolkata"  // Explicitly set to IST
 });
 
 
