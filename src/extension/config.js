@@ -1,16 +1,16 @@
 // Environment configuration
 window.config = {
   development: {
-    API_URL: 'http://localhost:4000'
+    API_URL: 'https://cf-backend-922736494190.asia-south2.run.app'
   },
   production: {
-    API_URL: 'https://cf-backend-922736494190.asia-south2.run.app'
+    API_URL: 'https://cf-backend-prod-922736494190.asia-south2.run.app'
   }
 };
 
-// Select environment based on build flag
-// Change this to 'production' for production builds
+
 window.config.current = window.config.production;
+//window.config.current = window.config.development;
 
 // Standard storage keys
 window.storageKeys = {
