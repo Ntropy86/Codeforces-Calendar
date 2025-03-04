@@ -75,5 +75,16 @@ cron.schedule('0 3 * * 0', async () => {
   }
 });
 
+
+// Keep the server alive with a self-ping every 5 minutes
+cron.schedule('*/5 * * * *', async () => {
+  try {
+    console.log('[CRON] Self-ping to keep service alive');
+    // This doesn't make an actual request, just logs to keep the instance active
+  } catch (error) {
+    console.error('[CRON] Error in keep-alive ping:', error);
+  }
+});
+
 // Log that cron jobs are initialized
 console.log('Scheduled jobs initialized successfully');
