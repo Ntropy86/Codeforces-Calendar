@@ -176,6 +176,7 @@ window.api = {
     try {
       const offset = 200;
       rating = ((rating / 100) * 100) + 100 + offset; 
+      console.log('Rating:', rating);
       const url = `${window.config.current.API_URL}/problemset/monthly?month=${month}&year=${year}&rating=${rating}`;
       console.log("Fetching monthly problems from:", url);
       
