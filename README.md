@@ -14,7 +14,6 @@
   </a>
 
 <h3 align="center">Codeforces Calendar POTD Chrome Extension</h3>
-
   <p align="center">
     Making Sure you conquer the world. One Test Case at a Time xD
     <br />
@@ -27,16 +26,18 @@
   </p>
 </div>
 
+---
+### ⭐NEW: DEVELOPER TESTING ⭐
+- Our Version 2 is up and runninga and we are looking for Testers and Anyone willing to point out any issues features.
+
+- Please refer to the [Dev Testing Documentation](./developerTesting.md)
+
+---
+
 <!-- TABLE OF CONTENTS -->
 <details>
   <summary>Table of Contents</summary>
   <ol>
-    <li>
-      <a href="#about-the-project">About The Project</a>
-      <ul>
-        <li><a href="#built-with">Built With</a></li>
-      </ul>
-    </li>
     <li>
       <a href="#getting-started">Getting Started</a>
       <ul>
