@@ -178,29 +178,25 @@ async function sequence(handle) {
   try {
     // Get or create user from backend (source of truth)
     showLoading("Getting user information...");
-    const userData = await window.api.getOrCreateUser(handle);
-    console.log("User data retrieved from backend:", userData);
-    
+    let userData = await window.api.getOrCreateUser(handle);
     // Store the complete user data from DB in userInfo
     await window.storage.set(window.storageKeys.USER_INFO, [userData]);
     
     // Store just the username for quick reference
     await window.storage.set(window.storageKeys.USER_DATA, { username: handle });
     
-    // Get streak directly from userData (backend data)
-    let streakCount = 0;
-    if (userData && userData[0].streak && userData[0].streak.last_streak_count !== undefined) {
-      if (typeof userData[0].streak.last_streak_count === 'number') {
-        streakCount = userData[0].streak.last_streak_count;
-      } else {
-        streakCount = parseInt(userData[0].streak.last_streak_count);
-      }
-      console.log("Streak from backend:", streakCount);
-    }
     
+    //check whether userData is an object or array
+    if (Array.isArray(userData)) {
+      userData = userData[0];
+      }
+
+
+    console.log("User data from backend DEBUG:", userData);
+
     // Get user rating
-    let userRating = userData[0].rating || 800;
-    console.log("DEBUG: UserRating: ", userRating) // Default to 1200 if rating isn't available
+    let userRating = userData.rating || 600;
+    console.log("DEBUG: UserRating: ", userRating) 
     // Get current date for month and year
     const { month: currentMonth, year: currentYear } = window.dateUtils.getCurrentMonthAndYear();
     
