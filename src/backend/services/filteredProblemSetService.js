@@ -200,7 +200,7 @@ const generateFilteredProblemSets = async () => {
         
         // Check if we already have a problem set for this month and year
         let filteredProblemSet = await findFilteredProblemSet(currentMonth, currentYear);
-        
+      
         // If it's the first day of the month or we don't have a problem set for this month, create a new one
         if (currentDay === 1 || !filteredProblemSet) {
             console.log(`Creating or clearing filtered problem set for ${currentMonth + 1}/${currentYear}.`);
@@ -213,6 +213,9 @@ const generateFilteredProblemSets = async () => {
             // Create a new one
             filteredProblemSet = await createFilteredProblemSet(currentMonth, currentYear);
         }
+        console.log("filteredProblemSet", filteredProblemSet);
+        // shuffle(filteredProblemSet);
+        console.log("filteredProblemSetshuffled", filteredProblemSet);
         
         // For each rating category, add problems for days that need to be populated
         await populateProblemSet(filteredProblemSet, currentDay, stats);
@@ -272,13 +275,22 @@ const generateFilteredProblemSets = async () => {
  * @param {Object} stats - Stats object to update
  * @returns {Promise<void>}
  */
+const shuffle = (array) => {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+        }
+    return array;
+}
+
 const populateProblemSet = async (problemSet, upToDay, stats) => {
     // For each rating category, add problems for days that need to be populated
     for (const rating of RATING_CATEGORIES) {
         try {
             // Get the problems map for this rating or create a new one
             let problemsForRating = problemSet.problems.get(rating.toString()) || [];
-            
+          //  console.log("Problems for rating", rating, problemsForRating);
+           // problemsForRating =  shuffle(problemsForRating);
             // Find the last day that has been populated for this rating
             let lastPopulatedDay = 0;
             

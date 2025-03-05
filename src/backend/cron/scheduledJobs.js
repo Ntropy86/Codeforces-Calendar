@@ -13,7 +13,7 @@ const userService = require('../services/userService');
 console.log('Initializing scheduled jobs...');
 
 /**
- * Update global problem set daily at 1:00 AM
+ * Update global problem set daily at 5:11 AM
  * This job fetches new problems from Codeforces API and updates the database
  */
 cron.schedule('11 5 * * *', async () => {
@@ -46,7 +46,7 @@ cron.schedule('17 5 * * *', async () => {
 });
 
 /**
- * Clean up old streak data weekly on Sunday at 3:00 AM
+ * Clean up old streak data weekly on Sunday at 6:07 AM
  * This job removes streak data older than 3 months to keep the database efficient
  */
 cron.schedule('07 6 * * 0', async () => {
