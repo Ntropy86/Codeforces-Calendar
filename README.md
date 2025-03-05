@@ -28,7 +28,7 @@
 
 ---
 ### ⭐NEW: DEVELOPER TESTING ⭐
-- Our Version 2 is up and runninga and we are looking for Testers and Anyone willing to point out any issues features.
+- Our Version 2 is up and running and we are looking for Testers and Anyone willing to point out any issues/features. Feel free to add them in the [issues tab](https://github.com/Ntropy86/Codeforces-Calendar/issues)
 
 - Please refer to the [Dev Testing Documentation](./developerTesting.md)
 
