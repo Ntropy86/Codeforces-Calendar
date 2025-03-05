@@ -18,10 +18,10 @@ The extension will be available on the Chrome Web Store in the near future.
 ### Manual Installation (Developer Mode)
 
 1. *Clone the repository*
-   bash
+   ```bash
    git clone https://github.com/Ntropy86/Codeforces-Calendar.git
    cd Codeforces-Calendar
-   
+   ```
 
 2. *Open Chrome Extensions page*
    - Navigate to chrome://extensions/ in your Chrome browser
@@ -29,7 +29,7 @@ The extension will be available on the Chrome Web Store in the near future.
 
 3. *Load the extension*
    - Click "Load unpacked"
-   - Select the root folder of the cloned repository (the folder containing manifest.json)
+   - Select the root folder (folder named "extension") of the cloned repository (the folder containing manifest.json)
 
 4. *Verify installation*
    - The extension icon should appear in your browser toolbar
