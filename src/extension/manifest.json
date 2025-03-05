@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "Codeforces POTD",
+  "description": "This Extension Gives you a New CF problem to solve each day according to your rating and challenges you. Got what it takes?",
+  "version": "2.0.0",
+  "permissions": [
+    "storage",
+    "scripting",
+    "tabs",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://codeforces.com/*",
+    "http://localhost:*/*",
+    "https://*.yourdomain.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://codeforces.com/*"],
+      "js": ["config.js", "storage.js", "api.js", "streak.js", "content.js"],
+      "css": ["style.css"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["config.js"],
+      "matches": ["https://codeforces.com/*"]
+    }
+  ]
+}

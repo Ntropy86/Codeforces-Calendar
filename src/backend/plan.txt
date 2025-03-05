@@ -1,0 +1,37 @@
+
+User{
+    username
+    rank: 
+    id
+
+    last streak {
+        date
+        problem_id
+        value
+    }
+}
+
+problems_set : updated everyday (for all RATINGS)
+
+problems : {
+    800: {1:{problem for day 1}... x:{problem for x}}
+    1000: {1:{problem for day 1}... x:{problem for x}}
+    .
+    .
+    .
+    3200:{...}
+}
+
+=====
+
+Cron job => everyday (x+1) at 12 AM => 
+        update problem_set
+        recalculate problems for length(problems.rating)+1
+        check if problem is used
+        update globalProblemSet flag to used
+        and new problem to problems
+
+Cron job => monthly at 12 AM
+            reset Streak
+            reset problems
+

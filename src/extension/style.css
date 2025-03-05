@@ -1,0 +1,310 @@
+:root {
+  --primary-color: #f9f9f9;
+  --secondary-color: #e6f2ff; /* Lighter blue */
+  --accent-color: #78a9e6; /* Pastel blue */
+  --accent-light: #d1e5ff; /* Very light blue */
+  --accent-dark: #5a8dd6; /* Slightly darker pastel blue */
+  --success-color: #a8d8a8; /* Pastel green */
+  --warning-color: #ffe0b2; /* Pastel orange */
+  --error-color: #ffbdbd; /* Pastel red */
+  --text-color: #555555; /* Softer text color */
+  --text-light: #999999;
+  --border-radius: 8px;
+  --shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  --border-color: #e0e0e0;
+}
+
+/* Calendar Container */
+.cf-potd-container {
+  /* padding: 10px; */
+  margin: 20px 0;
+  background-color: #fff;
+  border-radius: var(--border-radius);
+  /* box-shadow: var(--shadow); */
+  /* border: 1px solid var(--border-color); */
+  max-width: 350px; /* Add max-width to prevent overflow */
+  box-sizing: border-box; /* Include padding in the width calculation */
+}
+
+/* Calendar Table */
+.calendar {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 2px;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  overflow: hidden;
+  transform: scale(0.98);
+  transition: all 0.15s ease-in-out;
+  table-layout: fixed; /* Ensure equal column widths */
+}
+
+/* .calendar:hover {
+  transform: scale(1);
+} */
+
+/* Calendar Header */
+.calendar-header th {
+  background-color: var(--accent-color);
+  color: white;
+  padding: 12px;
+  font-size: 1.1em;
+  text-align: center;
+  border-radius: var(--border-radius) var(--border-radius) 0 0;
+}
+
+/* User Info Row */
+.user-info-row td {
+  padding: 8px;
+  background-color: var(--accent-light);
+  color: var(--text-color);
+}
+
+.user-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px;
+}
+
+.user-handle {
+  font-weight: bold;
+  color: var(--accent-dark);
+  text-decoration: none;
+}
+
+/* .user-handle:hover {
+  text-decoration: underline;
+} */
+
+/* Streak Container */
+.streak-container {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background-color: rgba(255, 255, 255, 0.5);
+  padding: 5px 10px;
+  border-radius: 20px;
+}
+
+.streak-flame {
+  color: #ff9a76; /* Pastel orange for flame */
+}
+
+.streak-count {
+  font-weight: bold;
+  color: #e67e7e; /* Pastel red for count */
+}
+
+.streak-label {
+  font-size: 0.8em;
+  color: var(--text-light);
+}
+
+/* Day Header */
+.day-header th {
+  background-color: var(--accent-color);
+  color: white;
+  padding: 8px 0; /* Reduce horizontal padding */
+  text-align: center;
+  font-size: 0.9em; /* Slightly smaller font */
+}
+
+/* Calendar Days */
+.calendar td {
+  text-align: center;
+  padding: 8px 0; /* Vertical padding only */
+  background-color: var(--primary-color);
+  border-radius: 4px;
+  transition: all 0.3s ease;
+  position: relative;
+  cursor: default; /* Default cursor for all cells */
+  font-size: 0.9em; /* Slightly smaller font */
+  height: 30px; /* Fixed height for cells */
+}
+
+
+
+/* Empty cell styling */
+.calendar td:empty {
+  background-color: transparent;
+  box-shadow: none;
+  border: none;
+  pointer-events: none; /* No hover or click events */
+}
+
+/* Day States */
+.calendar td.past {
+  background-color: #f5f5f5;
+}
+
+.calendar td.today {
+  background-color: #e3f2fd;
+  font-weight: bold;
+  box-shadow: 0 0 0 2px var(--accent-color);
+}
+
+.calendar td.future {
+  color: var(--text-light);
+}
+
+.calendar td.solved {
+  background-color: #e8f5e9; /* Light green background */
+}
+
+.calendar td.solved .checkmark {
+  color: var(--success-color);
+  font-weight: bold;
+  margin-left: 2px;
+  font-size: 0.9em; /* Slightly smaller checkmark */
+}
+
+/* Links */
+.calendar td a {
+  color: var(--accent-dark);
+  text-decoration: none;
+  padding: 2px 5px;
+  border-radius: 3px;
+  transition: all 0.2s ease;
+  display: inline-block;
+  cursor: pointer; /* Add pointer cursor for links */
+}
+
+.calendar td a:hover {
+  background-color: var(--accent-color);
+  color: white;
+}
+
+/* Status Message */
+.cf-potd-status {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  padding: 10px 15px;
+  background-color: rgba(120, 169, 230, 0.9); /* Pastel blue with transparency */
+  color: white;
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow);
+  z-index: 9999;
+  transition: all 0.3s ease;
+}
+
+/* Popup Styles */
+.container {
+  width: 300px;
+  padding: 20px;
+  background-color: #fff;
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow);
+}
+
+h1 {
+  color: var(--accent-dark);
+  margin-bottom: 15px;
+  text-align: center;
+}
+
+.input-group {
+  margin-bottom: 15px;
+}
+
+.input-group input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  font-size: 14px;
+}
+
+.button-group {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.button-group button {
+  flex: 1;
+  padding: 10px;
+  background-color: var(--accent-color);
+  color: white;
+  border: none;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.button-group button:hover {
+  background-color: var(--accent-dark);
+}
+
+.status-message {
+  margin-top: 10px;
+  padding: 8px;
+  border-radius: var(--border-radius);
+  text-align: center;
+}
+
+.error-message {
+  background-color: var(--error-color);
+  color: #d32f2f;
+}
+
+.success-message {
+  background-color: var(--success-color);
+  color: #2e7d32;
+}
+
+/* Streak UI in popup */
+#streakElement {
+  margin-top: 15px;
+}
+
+#streakElement .streak-container {
+  background-color: #f5f5f5;
+  border-radius: var(--border-radius);
+  padding: 10px 15px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#streakElement .streak-icon {
+  font-size: 24px;
+  margin-bottom: 5px;
+}
+
+#streakElement .streak-details {
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+#streakElement .streak-count {
+  font-size: 28px;
+  font-weight: bold;
+  color: #e67e7e;
+}
+
+#streakElement .streak-label {
+  font-size: 12px;
+  color: var(--text-light);
+}
+
+#streakElement .streak-progress {
+  width: 100%;
+  height: 6px;
+  background-color: #e0e0e0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+#streakElement .progress-bar {
+  height: 100%;
+  background-color: var(--accent-color);
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+#streakElement .streak-message {
+  text-align: center;
+  color: var(--text-light);
+  padding: 10px;
+}

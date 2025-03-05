@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Codeforces POTD</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Codeforces POTD</h1>
+    <div class="input-group">
+      <input id="userName" type="text" placeholder="Enter your CF Handle">
+    </div>
+    <div class="button-group">
+      <button id="userNameBtn">Go!</button>
+    </div>
+    <div id="statusMessage" class="status-message"></div>
+    <div id="streakElement"></div>
+  </div>
+  <!-- Load scripts in correct order -->
+  <script src="config.js"></script>
+  <script src="storage.js"></script>
+  <script src="api.js"></script>
+  <script src="streak.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
