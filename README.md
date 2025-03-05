@@ -56,7 +56,7 @@
 <!-- ABOUT THE PROJECT -->
 
 ## About The Project
-Adds a Calendar View giving you Porblem of the day based on your rating with Your Monthly Streaks!
+Adds a Calendar View giving you Problem of the day based on your rating with Your Monthly Streaks!
 
 <img src='./demo_image.png'>
 
