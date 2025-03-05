@@ -4,13 +4,13 @@ window.config = {
     API_URL: 'https://cf-backend-922736494190.asia-south2.run.app'
   },
   production: {
-    API_URL: 'https://cf-backend-prod-922736494190.asia-south2.run.app'
+    API_URL: 'xyz'
   }
 };
 
 
-window.config.current = window.config.production;
-//window.config.current = window.config.development;
+//window.config.current = window.config.production;
+window.config.current = window.config.development;
 
 // Standard storage keys
 window.storageKeys = {
