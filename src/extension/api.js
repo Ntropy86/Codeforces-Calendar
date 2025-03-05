@@ -175,13 +175,13 @@ window.api = {
   async getMonthlyProblems(month, year, rating) {
     try {
       const offset = 200;
-      rating = ((rating / 100) * 100) + 100 + offset; 
+      rating = Math.ceil(rating / 100) * 100 + offset; 
       console.log('Rating:', rating);
       const url = `${window.config.current.API_URL}/problemset/monthly?month=${month}&year=${year}&rating=${rating}`;
-      console.log("Fetching monthly problems from:", url);
+      console.log("Fetching monthly problems from api.js :", url);
       
       const response = await this.fetchWithRetry(url, { method: 'GET' });
-      console.log("API getMonthlyProblems response:", response);
+      console.log("API getMonthlyProblems response: api.js", response);
       
       if (response.data) {
         return response.data;

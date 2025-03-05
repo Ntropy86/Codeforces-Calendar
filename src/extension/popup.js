@@ -189,19 +189,18 @@ async function sequence(handle) {
     
     // Get streak directly from userData (backend data)
     let streakCount = 0;
-    if (userData && userData.streak && userData.streak.last_streak_count !== undefined) {
-      if (typeof userData.streak.last_streak_count === 'number') {
-        streakCount = userData.streak.last_streak_count;
+    if (userData && userData[0].streak && userData[0].streak.last_streak_count !== undefined) {
+      if (typeof userData[0].streak.last_streak_count === 'number') {
+        streakCount = userData[0].streak.last_streak_count;
       } else {
-        streakCount = parseInt(userData.streak.last_streak_count);
+        streakCount = parseInt(userData[0].streak.last_streak_count);
       }
       console.log("Streak from backend:", streakCount);
     }
     
     // Get user rating
-    let userRating = userData.rating || 800; // Default to 1200 if rating isn't available
-    const offset = 200;
-    userRating = userRating / 100 * 100 + 100 + offset;
+    let userRating = userData[0].rating || 800;
+    console.log("DEBUG: UserRating: ", userRating) // Default to 1200 if rating isn't available
     // Get current date for month and year
     const { month: currentMonth, year: currentYear } = window.dateUtils.getCurrentMonthAndYear();
     

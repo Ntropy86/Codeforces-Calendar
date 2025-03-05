@@ -362,7 +362,7 @@ async function handleDataRefresh() {
             
             // Get current month and year
             const { month, year } = window.dateUtils.getCurrentMonthAndYear();
-            
+            console.log("DEBUG userInfo handleDataRefresh bg.js", userData);
             // Get user rating
             const userRating = userData.rating || 1200;
             
