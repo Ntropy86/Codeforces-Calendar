@@ -10,9 +10,7 @@
     "alarms"
   ],
   "host_permissions": [
-    "https://codeforces.com/*",
-    "http://localhost:*/*",
-    "https://*.yourdomain.com/*"
+    "https://codeforces.com/*"
   ],
   "action": {
     "default_popup": "popup.html"
