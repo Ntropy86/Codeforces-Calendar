@@ -9,36 +9,35 @@
 <!-- PROJECT LOGO -->
 <br />
 <div align="center">
-  <a href="https://github.com/Ntropy86/CF">
+  <a href="https://github.com/Ntropy86/Codeforces-Calendar">
     <img src="./icon.png" alt="Logo" width="80" height="80">
   </a>
 
-<h3 align="center">CF CalCode</h3>
-
+<h3 align="center">Codeforces Calendar POTD Chrome Extension</h3>
   <p align="center">
     Making Sure you conquer the world. One Test Case at a Time xD
     <br />
-    <a href="https://github.com/Ntropy86/GymHelpr"><strong>Explore the docs »</strong></a>
     <br />
-    <br />
-    <a href="https://github.com/Ntropy86/GymHelpr">View Demo</a>
+    <a href="https://chromewebstore.google.com/detail/kdpcekneldcnkajbmabmfgdpcdjdmcfd?utm_source=item-share-cp">Download Extension</a>
     ·
-    <a href="https://github.com/Ntropy86/GymHelpr/issues">Report Bug</a>
+    <a href="https://github.com/Ntropy86/Codeforces-Calendar/issues">Report Bug</a>
     ·
-    <a href="https://github.com/Ntropy86/GymHelpr/issues">Request Feature</a>
+    <a href="https://github.com/Ntropy86/Codeforces-Calendar/issues">Request Feature</a>
   </p>
 </div>
+
+---
+### ⭐NEW: DEVELOPER TESTING ⭐
+- Our Version 2 is up and running and we are looking for Testers and Anyone willing to point out any issues/features. Feel free to add them in the [issues tab](https://github.com/Ntropy86/Codeforces-Calendar/issues)
+
+- Please refer to the [Dev Testing Documentation](./developerTesting.md)
+
+---
 
 <!-- TABLE OF CONTENTS -->
 <details>
   <summary>Table of Contents</summary>
   <ol>
-    <li>
-      <a href="#about-the-project">About The Project</a>
-      <ul>
-        <li><a href="#built-with">Built With</a></li>
-      </ul>
-    </li>
     <li>
       <a href="#getting-started">Getting Started</a>
       <ul>
@@ -58,12 +57,13 @@
 <!-- ABOUT THE PROJECT -->
 
 ## About The Project
+Adds a Calendar View giving you Problem of the day based on your rating with Your Monthly Streaks!
 
-[![Product Name Screen Shot][product-screenshot]](https://example.com)
+<img src='./demo_image.png'>
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
-### Built With
+<!-- ### Built With -->
 
 <!--
 -   [Next.js](https://nextjs.org/)
@@ -75,55 +75,20 @@
 -   [Bootstrap](https://getbootstrap.com)
 -   [JQuery](https://jquery.com) -->
 
-<p align="right">(<a href="#top">back to top</a>)</p>
+<!-- <p align="right">(<a href="#top">back to top</a>)</p> -->
 
 <!-- GETTING STARTED -->
-
 ## Getting Started
 
 Please read the instructions Given below Carefully 
 
+So There are two main Parts where you can contribute
+- The Frontend (The Chrome Extension)
+- The Backend (MongoDB + Express) [Backend Documentation](./Dev.md)
+
 ### Prerequisites
 
 - Make sure you are using a Browser running Chromium V108 and above
-
-### Installation
-0. Fork The Repo
-1. Clone the Forked repo
-    ```sh
-    git clone https://github.com/<YourGitHubUsername>/CF.git
-    ```
-2. Install The Extension From Extension Settings
-  - Open up your Chromium Based Browser and Click on Load Unpacked Extension
-  - Select the Folder With all the contents of the Repo
-  - Voila! You have Installed the Extension.
-
-3. Contributing
-  - In order to contribute Feel free to Raise a PR With a Suitable Title and Description of What You appended.
-  - Please make sure that your changes do not break any of the existing Functionalities or break the extension altogether. 
-
-<p align="right">(<a href="#top">back to top</a>)</p>
-
-<!-- USAGE EXAMPLES -->
-
-## Usage
-
-_For more examples, please refer to the [Documentation](https://example.com)_
-
-<p align="right">(<a href="#top">back to top</a>)</p>
-
-<!-- ROADMAP -->
-
-## Roadmap
-
--   [ ] Feature 1
--   [ ] Feature 2
--   [ ] Feature 3
-    -   [ ] Nested Feature
-
-See the [open issues](https://github.com/Ntropy86/GymHelpr/issues) for a full list of proposed features (and known issues).
-
-<p align="right">(<a href="#top">back to top</a>)</p>
 
 <!-- CONTRIBUTING -->
 
@@ -154,13 +119,13 @@ Distributed under the MIT License. See `LICENSE.txt` for more information.
 
 ## Contact
 
-Nitigya Kargeti - [@Ntropy86](https://twitter.com/Ntropy86) 
+Neat (Nitigya K) - [@Ntropy86](https://twitter.com/Ntropy86) 
 
 
-Anant Kumar Srivastava - [@the-anantkumar](https://www.linkedin.com/in/anant-kumar-srivastava-65223a5b/)
+Disypher (Anant Kumar Srivastava) - [@the-anantkumar](https://www.linkedin.com/in/anant-kumar-srivastava-65223a5b/)
 
 
-Project Link: [CalCode](https://github.com/Ntropy86/CF)
+Project Link: [CodeForces POTD](https://github.com/Ntropy86/Codeforces-Calendar)
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -168,26 +133,24 @@ Project Link: [CalCode](https://github.com/Ntropy86/CF)
 
 ## Acknowledgments
 
--   [Ntropy](https://github.com/Ntropy86)
+-   [Neat](https://github.com/Ntropy86)
 
-
--   [the_anantkumar](https://github.com/the-anantkumar)
+-   [disypher](https://github.com/the-anantkumar)
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
 <!-- MARKDOWN LINKS & IMAGES -->
-<!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
 
 [contributors-shield]: https://img.shields.io/github/contributors/Ntropy86/CF.svg?style=for-the-badge
-[contributors-url]: https://github.com/Ntropy86/CF/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/Ntropy86/CF.svg?style=for-the-badge
-[forks-url]: https://github.com/Ntropy86/CF/network/members
-[stars-shield]: https://img.shields.io/github/stars/Ntropy86/CF.svg?style=for-the-badge
-[stars-url]: https://github.com/Ntropy86/CF/stargazers
-[issues-shield]: https://img.shields.io/github/issues/Ntropy86/CF.svg?style=for-the-badge
-[issues-url]: https://github.com/Ntropy86/CF/issues
-[license-shield]: https://img.shields.io/github/license/Ntropy86/CF.svg?style=for-the-badge
-[license-url]: https://github.com/Ntropy86/CF/blob/master/LICENSE.txt
+[contributors-url]: https://github.com/Ntropy86/Codeforces-Calendar/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/Ntropy86/Codeforces-Calendar.svg?style=for-the-badge
+[forks-url]: https://github.com/Ntropy86/Codeforces-Calendar/network/members
+[stars-shield]: https://img.shields.io/github/stars/Ntropy86/Codeforces-Calendar.svg?style=for-the-badge
+[stars-url]: https://github.com/Ntropy86/Codeforces-Calendar/stargazers
+[issues-shield]: https://img.shields.io/github/issues/Ntropy86/Codeforces-Calendar.svg?style=for-the-badge
+[issues-url]: https://github.com/Ntropy86/Codeforces-Calendar/issues
+[license-shield]: https://img.shields.io/github/license/Ntropy86/Codeforces-Calendar.svg?style=for-the-badge
+[license-url]: https://github.com/Ntropy86/Codeforces-Calendar/blob/master/LICENSE.txt
 [linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
 [linkedin-url]: https://linkedin.com/in/nitigyak
 [product-screenshot]: images/screenshot.png
