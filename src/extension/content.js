@@ -8,6 +8,16 @@ if (typeof window.cfPotdIsRefreshing === 'undefined') {
   window.cfPotdIsRefreshing = false;
 }
 
+// Listen for requests from the background script to refresh the calendar
+chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
+  if (req.action === 'refreshCalendar') {
+    if (typeof window.refreshCalendar === 'function') {
+      window.refreshCalendar();
+    }
+    sendResponse && sendResponse({ success: true });
+  }
+});
+
 // Define createCalendar function first before it's referenced
 async function createCalendar() {
   console.log("createCalendar: Called");
