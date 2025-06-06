@@ -95,6 +95,9 @@ async function handleApiCall(method, endpoint, data) {
   }
 }
 
+// Track whether we need to refresh the calendar when a Codeforces tab becomes active
+let pendingCalendarRefresh = false;
+
 // Set up event listener for tab updates to inject calendar
 chrome.tabs.onUpdated.addListener(function(tabId, changeInfo, tab) {
   // Only run when the tab is fully loaded and it's a Codeforces page
@@ -111,6 +114,20 @@ chrome.tabs.onUpdated.addListener(function(tabId, changeInfo, tab) {
         console.log("No user data found, not injecting calendar");
       }
     });
+  }
+});
+
+// When a tab becomes active, refresh the calendar if a background update occurred
+chrome.tabs.onActivated.addListener(async ({ tabId }) => {
+  if (!pendingCalendarRefresh) return;
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    if (tab.url && tab.url.includes('codeforces.com')) {
+      chrome.tabs.sendMessage(tabId, { action: 'refreshCalendar' });
+      pendingCalendarRefresh = false;
+    }
+  } catch (e) {
+    console.error('Error handling onActivated:', e);
   }
 });
 
@@ -325,6 +342,114 @@ async function handleSubmissionCheck() {
   }
 }
 
+// Fetch user info and problems directly from the backend and store them
+async function fetchUserAndProblems(handle) {
+  const API_URL = 'https://cf-backend-922736494190.asia-south2.run.app';
+
+  // Helper to retry fetches
+  async function fetchWithRetry(url, options, maxRetries = 3, delay = 2000) {
+    let lastError;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const res = await fetch(url, options);
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        return await res.json();
+      } catch (err) {
+        lastError = err;
+        if (attempt < maxRetries - 1) {
+          await new Promise(r => setTimeout(r, delay));
+        }
+      }
+    }
+    throw lastError;
+  }
+
+  function getCurrentMonthAndYear() {
+    const today = new Date();
+    return { month: today.getUTCMonth() + 1, year: today.getUTCFullYear() };
+  }
+
+  function extractProblemIdParts(problemId) {
+    const match = problemId.match(/(\d+)([A-Z]\d*)/);
+    return match ? { contestId: parseInt(match[1]), index: match[2] } : null;
+  }
+
+  function formatProblems(problemsData, currentMonth, currentYear, userRating) {
+    let formattedProblems = [];
+    if (problemsData && Array.isArray(problemsData)) {
+      formattedProblems = problemsData.map(p => {
+        const date = new Date(Date.UTC(currentYear, currentMonth - 1, p.day));
+        return { date: date.toISOString(), problem: extractProblemIdParts(p.problemID) || { contestId: parseInt(p.problemID), index: 'A' }, url: p.problemURL };
+      });
+    } else if (problemsData && problemsData.ratings && problemsData.ratings[userRating]) {
+      const problems = problemsData.ratings[userRating];
+      Object.entries(problems).forEach(([day, p]) => {
+        const date = new Date(Date.UTC(currentYear, currentMonth - 1, parseInt(day)));
+        formattedProblems.push({ date: date.toISOString(), problem: extractProblemIdParts(p.problemID) || { contestId: parseInt(p.problemID), index: 'A' }, url: p.problemURL });
+      });
+    } else if (problemsData && problemsData.problems && Array.isArray(problemsData.problems)) {
+      formattedProblems = problemsData.problems.map(p => {
+        const date = new Date(Date.UTC(currentYear, currentMonth - 1, p.day));
+        return { date: date.toISOString(), problem: extractProblemIdParts(p.problemID) || { contestId: parseInt(p.problemID), index: 'A' }, url: p.problemURL };
+      });
+    } else if (problemsData && problemsData.data) {
+      if (Array.isArray(problemsData.data)) {
+        formattedProblems = problemsData.data.map(p => {
+          const date = new Date(Date.UTC(currentYear, currentMonth - 1, p.day));
+          return { date: date.toISOString(), problem: extractProblemIdParts(p.problemID) || { contestId: parseInt(p.problemID), index: 'A' }, url: p.problemURL };
+        });
+      } else if (problemsData.data.problems && Array.isArray(problemsData.data.problems)) {
+        formattedProblems = problemsData.data.problems.map(p => {
+          const date = new Date(Date.UTC(currentYear, currentMonth - 1, p.day));
+          return { date: date.toISOString(), problem: extractProblemIdParts(p.problemID) || { contestId: parseInt(p.problemID), index: 'A' }, url: p.problemURL };
+        });
+      } else if (problemsData.data.ratings && problemsData.data.ratings[userRating]) {
+        const problems = problemsData.data.ratings[userRating];
+        Object.entries(problems).forEach(([day, p]) => {
+          const date = new Date(Date.UTC(currentYear, currentMonth - 1, parseInt(day)));
+          formattedProblems.push({ date: date.toISOString(), problem: extractProblemIdParts(p.problemID) || { contestId: parseInt(p.problemID), index: 'A' }, url: p.problemURL });
+        });
+      }
+    }
+    return formattedProblems;
+  }
+
+  try {
+    const userRes = await fetchWithRetry(`${API_URL}/users`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userID: handle })
+    });
+
+    let userData = null;
+    if (userRes.message && typeof userRes.message === 'object') {
+      userData = userRes.message;
+    } else if (userRes.user) {
+      userData = userRes.user;
+    } else if (userRes.message && Array.isArray(userRes.message) && userRes.message.length > 0) {
+      userData = userRes.message[0];
+    }
+    if (!userData) throw new Error('Unable to parse user data');
+
+    await chrome.storage.local.set({ userInfo: [userData] });
+
+    const { month, year } = getCurrentMonthAndYear();
+    const rating = Math.ceil((userData.rating || 800) / 100) * 100 + 200;
+    const problemsRes = await fetchWithRetry(`${API_URL}/problemset/monthly?month=${month}&year=${year}&rating=${rating}`, { method: 'GET' });
+    const problemsData = problemsRes.data ? problemsRes.data : problemsRes;
+    const formattedProblems = formatProblems(problemsData, month, year, rating);
+    await chrome.storage.local.set({ problemData: formattedProblems });
+
+    console.log('Background fetch completed');
+    return true;
+  } catch (err) {
+    console.error('Background fetchUserAndProblems error:', err);
+    return false;
+  }
+}
+
 // Handle data refresh
 async function handleDataRefresh() {
   try {
@@ -341,9 +466,10 @@ async function handleDataRefresh() {
     }
     
     const userHandle = userData.userData.username;
-    
+
     // We need to inject the scripts to use API functions
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    let injectionSucceeded = false;
     if (tab && tab.url && tab.url.includes('codeforces.com')) {
       // Inject required scripts
       await chrome.scripting.executeScript({
@@ -352,7 +478,7 @@ async function handleDataRefresh() {
       });
       
       // Execute data refresh in the context of the tab
-      await chrome.scripting.executeScript({
+      const [{ result: refreshResult }] = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
         func: async (handle) => {
           try {
@@ -488,7 +614,8 @@ async function handleDataRefresh() {
         },
         args: [userHandle]
       });
-      
+      injectionSucceeded = refreshResult && refreshResult.success;
+
       // Notify the user that data has been refreshed
       await chrome.scripting.executeScript({
         target: { tabId: tab.id },
@@ -505,7 +632,14 @@ async function handleDataRefresh() {
         }
       });
     } else {
-      console.log("No active Codeforces tab found, skipping data refresh");
+      console.log("No active Codeforces tab found, using background fetch");
+    }
+
+    if (!injectionSucceeded) {
+      const ok = await fetchUserAndProblems(userHandle);
+      if (ok && !(tab && tab.url && tab.url.includes('codeforces.com'))) {
+        pendingCalendarRefresh = true;
+      }
     }
   } catch (error) {
     console.error('Error in scheduled data refresh:', error);
