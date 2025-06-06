@@ -58,6 +58,7 @@
 
 ## About The Project
 Adds a Calendar View giving you Problem of the day based on your rating with Your Monthly Streaks!
+Now automatically adapts to your browser's dark mode.
 
 <img src='./demo_image.png'>
 
