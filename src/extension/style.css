@@ -114,6 +114,7 @@
   text-align: center;
   padding: 8px 0; /* Vertical padding only */
   background-color: var(--primary-color);
+  color: var(--text-color);
   border-radius: 4px;
   transition: all 0.3s ease;
   position: relative;
@@ -139,6 +140,7 @@
 
 .calendar td.today {
   background-color: var(--accent-light);
+  color: var(--text-color);
   font-weight: bold;
   box-shadow: 0 0 0 2px var(--accent-color);
 }
@@ -149,6 +151,7 @@
 
 .calendar td.solved {
   background-color: #e8f5e9; /* Light green background */
+  color: var(--text-color);
 }
 
 .calendar td.solved .checkmark {
