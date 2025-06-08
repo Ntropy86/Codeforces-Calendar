@@ -176,6 +176,7 @@ window.api = {
     try {
       const offset = 200;
       rating = Math.ceil(rating / 100) * 100 + offset; 
+      rating = Math.min(rating, 3500); // Cap rating at 3500
       console.log('Rating:', rating);
       const url = `${window.config.current.API_URL}/problemset/monthly?month=${month}&year=${year}&rating=${rating}`;
       console.log("Fetching monthly problems from api.js :", url);
