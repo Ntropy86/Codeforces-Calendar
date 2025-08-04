@@ -57,13 +57,17 @@ window.storage = {
     },
     
     /**
-     * Clear specific keys from storage
-     * @param {Array<string>} keys - Keys to clear
+     * Clear specific keys from storage or all data if no keys provided
+     * @param {Array<string>} keys - Keys to clear, or undefined to clear all
      * @returns {Promise<void>}
      */
     async clear(keys) {
       return new Promise((resolve) => {
-        chrome.storage.local.remove(keys, resolve);
+        if (keys && keys.length > 0) {
+          chrome.storage.local.remove(keys, resolve);
+        } else {
+          chrome.storage.local.clear(resolve);
+        }
       });
     }
   };

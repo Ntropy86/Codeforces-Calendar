@@ -40,6 +40,9 @@ async function createCalendar() {
     const problemData = result.problemData || [];
     console.log("Problem data:", problemData);
     
+    // Diagnostic information for troubleshooting
+    logDiagnosticInfo(problemData, userHandle);
+    
     // Extract user handle from multiple possible sources
     let userHandle = "Unknown";
     
@@ -224,15 +227,53 @@ async function createCalendar() {
               return problemDate === isoDate;
             });
             
-            if (filteredProblems.length > 0 && filteredProblems[0].url) {
-              url = filteredProblems[0].url;
+            if (filteredProblems.length > 0) {
+              const problem = filteredProblems[0];
+              if (problem.url) {
+                url = problem.url;
+              } else {
+                // Generate fallback URL if backend URL is missing
+                if (problem.problem && problem.problem.contestId && problem.problem.index) {
+                  url = `https://codeforces.com/problemset/problem/${problem.problem.contestId}/${problem.problem.index}`;
+                  console.warn(`CF-POTD: Missing URL for ${isoDate}, generated fallback:`, url);
+                } else {
+                  console.warn(`CF-POTD: Problem found for ${isoDate} but missing URL and contest info:`, problem);
+                }
+              }
+            } else {
+              // Debug: Log when no problems found for a date
+              if (day <= referenceDate) {
+                console.log(`CF-POTD: No problem found for date ${isoDate} (day ${day})`);
+              }
+            }
+          } else {
+            // Debug: Log when problem data is empty
+            if (day <= referenceDate) {
+              console.warn(`CF-POTD: Problem data is empty or missing for calendar generation`);
             }
           }
           
           // Only hyperlink if a URL exists and the day is today or in the past
-          const cellContent = (url && day <= referenceDate) 
-            ? `<a href="${url}" target="_blank">${day}</a>` 
-            : day;
+          let cellContent;
+          if (url && day <= referenceDate) {
+            cellContent = `<a href="${url}" target="_blank">${day}</a>`;
+          } else if (day <= referenceDate && problemData && problemData.length > 0) {
+            // Check if we have a problem for this day but no URL
+            const filteredProblems = problemData.filter(function(problem) {
+              if (!problem || !problem.date) return false;
+              const problemDate = problem.date.split("T")[0];
+              return problemDate === isoDate;
+            });
+            
+            if (filteredProblems.length > 0) {
+              // Problem exists but no URL - show day with indicator
+              cellContent = `${day} <span class="no-link-indicator" title="Problem exists but link is missing">⚠️</span>`;
+            } else {
+              cellContent = day;
+            }
+          } else {
+            cellContent = day;
+          }
           
           calendarHTML += `<td class="${cellClass}" data-date="${isoDate}">${cellContent}</td>`;
           day++;
@@ -500,6 +541,54 @@ function updateStreakUI(streak) {
   } else {
     console.warn("updateStreakUI: Streak element not found.");
   }
+}
+
+// Diagnostic function to help troubleshoot missing links
+function logDiagnosticInfo(problemData, userHandle) {
+  console.log("=== CF-POTD DIAGNOSTIC INFORMATION ===");
+  console.log(`User Handle: ${userHandle}`);
+  console.log(`Problem Data Length: ${problemData ? problemData.length : 0}`);
+  
+  if (problemData && problemData.length > 0) {
+    console.log("Sample Problem Data:", problemData[0]);
+    
+    // Check for missing URLs
+    const problemsWithoutUrls = problemData.filter(p => !p.url);
+    if (problemsWithoutUrls.length > 0) {
+      console.warn(`CF-POTD: ${problemsWithoutUrls.length} problems missing URLs:`, problemsWithoutUrls);
+    }
+    
+    // Check for missing problem info
+    const problemsWithoutInfo = problemData.filter(p => !p.problem || !p.problem.contestId || !p.problem.index);
+    if (problemsWithoutInfo.length > 0) {
+      console.warn(`CF-POTD: ${problemsWithoutInfo.length} problems missing contest info:`, problemsWithoutInfo);
+    }
+    
+    // Log date range
+    const dates = problemData.map(p => p.date ? p.date.split("T")[0] : null).filter(d => d);
+    const minDate = dates.length > 0 ? Math.min(...dates) : null;
+    const maxDate = dates.length > 0 ? Math.max(...dates) : null;
+    console.log(`Problem Date Range: ${minDate} to ${maxDate}`);
+    
+    // Current date for comparison
+    const today = window.dateUtils.getTodayISO();
+    console.log(`Today's Date (UTC): ${today}`);
+    
+    // Check if today has a problem
+    const todaysProblem = problemData.find(p => p.date && p.date.split("T")[0] === today);
+    if (todaysProblem) {
+      console.log(`Today's Problem:`, todaysProblem);
+    } else {
+      console.warn(`CF-POTD: No problem found for today (${today})`);
+    }
+  } else {
+    console.error("CF-POTD: No problem data available - this could be why links aren't showing");
+    console.log("Troubleshooting steps:");
+    console.log("1. Check if your Codeforces handle is correct");
+    console.log("2. Try clearing extension storage (go to popup and re-enter your handle)");
+    console.log("3. Check if the backend API is working properly");
+  }
+  console.log("=========================================");
 }
 
 // Initialize on load

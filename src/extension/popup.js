@@ -15,9 +15,14 @@ async function main() {
 // Set up UI event listeners
 function setupEventListeners() {
   const usernameButton = document.getElementById("userNameBtn");
+  const clearCacheButton = document.getElementById("clearCacheBtn");
   
   if (usernameButton) {
     usernameButton.addEventListener("click", recordUsername);
+  }
+  
+  if (clearCacheButton) {
+    clearCacheButton.addEventListener("click", clearCache);
   }
 }
 
@@ -332,4 +337,35 @@ function formatProblems(problemsData, currentMonth, currentYear, userRating) {
   }
   
   return formattedProblems;
+}
+
+// Clear cache function for troubleshooting
+async function clearCache() {
+  try {
+    showLoading("Clearing cache...");
+    
+    // Clear all extension storage
+    await window.storage.clear();
+    
+    // Reset UI
+    const usernameElement = document.getElementById("userName");
+    if (usernameElement) {
+      usernameElement.value = "";
+    }
+    
+    const userNameBtn = document.getElementById("userNameBtn");
+    if (userNameBtn) {
+      userNameBtn.textContent = "Go!";
+    }
+    
+    // Update streak UI
+    updateStreakUI(0);
+    
+    showSuccess("Cache cleared! Please re-enter your handle and try again.");
+    
+    console.log("CF-POTD: Cache cleared successfully");
+  } catch (error) {
+    window.errorHandler.logError('clearCache', error);
+    showError("Failed to clear cache. Please try reloading the extension.");
+  }
 }

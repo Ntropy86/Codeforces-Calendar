@@ -236,6 +236,21 @@ h1 {
   background-color: var(--accent-dark);
 }
 
+.secondary-btn {
+  background-color: var(--text-light) !important;
+  color: white !important;
+}
+
+.secondary-btn:hover {
+  background-color: var(--text-color) !important;
+}
+
+.no-link-indicator {
+  font-size: 0.7em;
+  opacity: 0.7;
+  cursor: help;
+}
+
 .status-message {
   margin-top: 10px;
   padding: 8px;
