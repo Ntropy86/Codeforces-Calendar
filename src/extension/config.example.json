@@ -1,0 +1,23 @@
+{
+  "environment": "development",
+  "api": {
+    "development": {
+      "url": "http://localhost:4000",
+      "description": "Local Docker backend for development"
+    },
+    "staging": {
+      "url": "YOUR_HUGGINGFACE_SPACE_URL_HERE",
+      "description": "HuggingFace Spaces deployment for testing"
+    },
+    "production": {
+      "url": "YOUR_PRODUCTION_API_URL_HERE",
+      "description": "Google Cloud Run production deployment"
+    }
+  },
+  "features": {
+    "enableDebugLogs": true,
+    "enableAnimations": true,
+    "enableDarkMode": true
+  }
+}
+

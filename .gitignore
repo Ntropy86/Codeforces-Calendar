@@ -6,9 +6,15 @@ npm-debug.log
 /.idea
 /public
 
+# Environment files (contain secrets)
 .env
+.env.*
+!.env.example
 .passport.js
 .DS_Store
+
+# Extension configuration (contains API endpoints)
+/src/extension/config.json
 
 build/
 dist/

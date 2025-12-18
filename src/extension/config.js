@@ -1,16 +1,68 @@
-// Environment configuration
-window.config = {
-  development: {
-    API_URL: 'https://cf-backend-922736494190.asia-south2.run.app'
+/**
+ * Configuration Loader for Chrome Extension
+ * 
+ * IMPORTANT: This file loads configuration from config.json
+ * Never commit config.json - it's gitignored and contains API endpoints
+ * 
+ * Setup:
+ * 1. Copy config.example.json to config.json
+ * 2. Edit config.json with your settings
+ * 3. Set environment to "development" or "production"
+ */
+
+// Default fallback configuration (if config.json fails to load)
+const DEFAULT_CONFIG = {
+  environment: 'development',
+  api: {
+    development: {
+      url: 'http://localhost:4000'
+    },
+    production: {
+      url: 'https://your-production-api.com'
+    }
   },
-  production: {
-    API_URL: 'xyz'
+  features: {
+    enableDebugLogs: true,
+    enableAnimations: true,
+    enableDarkMode: true
   }
 };
 
+// Load configuration from config.json
+let loadedConfig = DEFAULT_CONFIG;
 
-//window.config.current = window.config.production;
-window.config.current = window.config.development;
+// Try to load config.json (this works in Chrome extensions)
+fetch(chrome.runtime.getURL('config.json'))
+  .then(response => response.json())
+  .then(config => {
+    loadedConfig = config;
+    console.log(`[Config] Loaded ${config.environment} environment`);
+  })
+  .catch(error => {
+    console.warn('[Config] Could not load config.json, using defaults. Please copy config.example.json to config.json');
+    console.warn('[Config] Error:', error.message);
+  });
+
+// Export configuration object
+window.config = {
+  get current() {
+    const env = loadedConfig.environment || 'development';
+    return {
+      API_URL: loadedConfig.api[env].url,
+      environment: env,
+      features: loadedConfig.features
+    };
+  },
+  
+  // Helper to get current environment
+  isDevelopment() {
+    return loadedConfig.environment === 'development';
+  },
+  
+  isProduction() {
+    return loadedConfig.environment === 'production';
+  }
+};
 
 // Standard storage keys
 window.storageKeys = {

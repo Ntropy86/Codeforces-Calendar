@@ -1,0 +1,24 @@
+{
+  "name": "codeforces-potd-extension",
+  "version": "2.1.0",
+  "description": "Codeforces Problem of the Day Chrome Extension - Development Tools",
+  "scripts": {
+    "dev": "web-ext run --source-dir=. --target=chromium --start-url='https://codeforces.com' --browser-console",
+    "dev:firefox": "web-ext run --source-dir=.",
+    "lint": "web-ext lint --source-dir=.",
+    "build": "web-ext build --source-dir=. --artifacts-dir=../../dist",
+    "watch": "node scripts/watch-reload.js"
+  },
+  "devDependencies": {
+    "web-ext": "^7.11.0",
+    "chokidar": "^3.5.3"
+  },
+  "keywords": [
+    "codeforces",
+    "chrome-extension",
+    "competitive-programming"
+  ],
+  "author": "Neat, Disypher",
+  "license": "ISC"
+}
+
