@@ -37,7 +37,7 @@ window.storage = {
     async set(key, value) {
       return new Promise((resolve) => {
         chrome.storage.local.set({ [key]: value }, () => {
-          console.log(`Storage: Set ${key}`, value);
+          window.log?.debug?.(`[storage] set ${key}`);
           resolve();
         });
       });

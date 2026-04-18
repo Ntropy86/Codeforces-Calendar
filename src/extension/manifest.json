@@ -5,14 +5,11 @@
   "version": "2.0.0",
   "permissions": [
     "storage",
-    "scripting",
-    "tabs",
-    "alarms"
+    "tabs"
   ],
   "host_permissions": [
     "https://codeforces.com/*",
-    "http://localhost:*/*",
-    "https://*.yourdomain.com/*"
+    "http://localhost:*/*"
   ],
   "action": {},
   "icons": {

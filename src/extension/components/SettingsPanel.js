@@ -1,29 +1,58 @@
 /**
- * SettingsPanel Component
- * Handles settings and user management
+ * Settings modal. Opened from the calendar header gear icon or the
+ * extension's browser-action button. Exposes user info, manual refresh
+ * actions, and user-facing preferences.
+ *
+ * Dark mode / notifications toggles currently just flip CSS classes — full
+ * implementation is scheduled for the UX sprint.
  */
+
+function unwrapUserFromStorage(userInfo) {
+  if (!userInfo) return null;
+  if (Array.isArray(userInfo) && userInfo.length > 0) {
+    return Array.isArray(userInfo[0]) ? userInfo[0][0] : userInfo[0];
+  }
+  return typeof userInfo === "object" ? userInfo : null;
+}
+
+/**
+ * Small helper to drive a transient button state (loading → result → reset).
+ * `work` resolves with the label to show on success.
+ */
+async function runButtonWorkflow(btn, originalText, loadingText, work, resetMs = 2000) {
+  try {
+    btn.textContent = loadingText;
+    btn.disabled = true;
+    const resultText = await work();
+    btn.textContent = resultText;
+  } catch (err) {
+    btn.textContent = "❌ Failed";
+    throw err;
+  } finally {
+    setTimeout(() => {
+      btn.textContent = originalText;
+      btn.disabled = false;
+    }, resetMs);
+  }
+}
 
 class SettingsPanel {
   constructor(userData) {
     this.userData = userData;
     this.container = null;
     this.isOpen = false;
+    this.keydownHandler = null;
   }
 
-  /**
-   * Render the settings panel
-   * @returns {HTMLElement} - The settings panel container
-   */
   render() {
-    const panel = document.createElement('div');
-    panel.className = 'cf-potd-settings-panel';
-    panel.style.display = 'none'; // Hidden by default
+    const panel = document.createElement("div");
+    panel.className = "cf-potd-settings-panel";
+    panel.style.display = "none";
 
-    const username = this.userData?.username || 'Unknown';
+    const username = this.userData?.username || "Unknown";
     // Show an em-dash for genuinely missing rating rather than defaulting
-    // to a misleading 800 (legacy behavior that caused stale-looking UI).
-    const rating =
-      this.userData?.rating != null ? this.userData.rating : '—';
+    // to a misleading 800.
+    const rating = this.userData?.rating != null ? this.userData.rating : "—";
 
     panel.innerHTML = `
       <div class="settings-overlay"></div>
@@ -32,9 +61,8 @@ class SettingsPanel {
           <h3>⚙️ Settings</h3>
           <button class="settings-close-btn" title="Close">×</button>
         </div>
-        
+
         <div class="settings-body">
-          <!-- User Info Section -->
           <div class="settings-section">
             <h4>User Information</h4>
             <div class="info-row">
@@ -46,22 +74,14 @@ class SettingsPanel {
               <span id="settings-user-rating" class="info-value">${rating}</span>
             </div>
           </div>
-          
-          <!-- Actions Section -->
+
           <div class="settings-section">
             <h4>Actions</h4>
-            <button id="settings-refresh-rating" class="settings-btn">
-              🔄 Refresh Rating
-            </button>
-            <button id="settings-refresh-problems" class="settings-btn">
-              📅 Refresh Problems
-            </button>
-            <button id="settings-change-user" class="settings-btn">
-              👤 Change User
-            </button>
+            <button id="settings-refresh-rating" class="settings-btn">🔄 Refresh Rating</button>
+            <button id="settings-refresh-problems" class="settings-btn">📅 Refresh Problems</button>
+            <button id="settings-change-user" class="settings-btn">👤 Change User</button>
           </div>
-          
-          <!-- Preferences Section -->
+
           <div class="settings-section">
             <h4>Preferences</h4>
             <div class="setting-toggle">
@@ -71,8 +91,10 @@ class SettingsPanel {
               </label>
             </div>
             <div class="setting-toggle">
-              <input type="checkbox" id="setting-animations" checked />
-              <span>Enable Animations</span>
+              <label>
+                <input type="checkbox" id="setting-animations" checked />
+                <span>Enable Animations</span>
+              </label>
             </div>
             <div class="setting-toggle">
               <label>
@@ -81,380 +103,178 @@ class SettingsPanel {
               </label>
             </div>
           </div>
-          
-          <!-- About Section -->
+
           <div class="settings-section">
             <h4>About</h4>
             <p class="about-text">
               Codeforces POTD Extension v2.0<br/>
               Track your daily problem-solving streak!
             </p>
-            <a href="https://github.com/your-repo" target="_blank" class="settings-link">
-              📖 Documentation
-            </a>
           </div>
         </div>
       </div>
     `;
-    
+
     this.container = panel;
     this.attachEventListeners();
     return panel;
   }
 
-  /**
-   * Attach event listeners
-   */
   attachEventListeners() {
-    // Close button
-    const closeBtn = this.container.querySelector('.settings-close-btn');
-    if (closeBtn) {
-      closeBtn.addEventListener('click', () => this.close());
-    }
-    
-    // Overlay click to close
-    const overlay = this.container.querySelector('.settings-overlay');
-    if (overlay) {
-      overlay.addEventListener('click', () => this.close());
-    }
-    
-    // Refresh rating button
-    const refreshRatingBtn = this.container.querySelector('#settings-refresh-rating');
-    if (refreshRatingBtn) {
-      refreshRatingBtn.addEventListener('click', () => this.handleRefreshRating());
-    }
-    
-    // Refresh problems button
-    const refreshProblemsBtn = this.container.querySelector('#settings-refresh-problems');
-    if (refreshProblemsBtn) {
-      refreshProblemsBtn.addEventListener('click', () => this.handleRefreshProblems());
-    }
-    
-    // Change user button
-    const changeUserBtn = this.container.querySelector('#settings-change-user');
-    if (changeUserBtn) {
-      changeUserBtn.addEventListener('click', () => this.handleChangeUser());
-    }
-    
-    // Dark mode toggle
-    const darkModeToggle = this.container.querySelector('#setting-dark-mode');
-    if (darkModeToggle) {
-      darkModeToggle.addEventListener('change', (e) => this.handleDarkModeToggle(e.target.checked));
-    }
-    
-    // Animations toggle
-    const animationsToggle = this.container.querySelector('#setting-animations');
-    if (animationsToggle) {
-      animationsToggle.addEventListener('change', (e) => this.handleAnimationsToggle(e.target.checked));
-    }
-    
-    // Notifications toggle
-    const notificationsToggle = this.container.querySelector('#setting-notifications');
-    if (notificationsToggle) {
-      notificationsToggle.addEventListener('change', (e) => this.handleNotificationsToggle(e.target.checked));
-    }
-    
-    // Escape key to close
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && this.isOpen) {
-        this.close();
-      }
-    });
+    const $ = (sel) => this.container.querySelector(sel);
+
+    $(".settings-close-btn")?.addEventListener("click", () => this.close());
+    $(".settings-overlay")?.addEventListener("click", () => this.close());
+    $("#settings-refresh-rating")?.addEventListener("click", () => this.handleRefreshRating());
+    $("#settings-refresh-problems")?.addEventListener("click", () => this.handleRefreshProblems());
+    $("#settings-change-user")?.addEventListener("click", () => this.handleChangeUser());
+    $("#setting-dark-mode")?.addEventListener("change", (e) =>
+      document.documentElement.classList.toggle("cf-potd-dark-mode", e.target.checked)
+    );
+    $("#setting-animations")?.addEventListener("change", (e) =>
+      document.documentElement.classList.toggle("cf-potd-no-animations", !e.target.checked)
+    );
+    // Notifications are wired but no-op until the notifications sprint.
+
+    this.keydownHandler = (e) => {
+      if (e.key === "Escape" && this.isOpen) this.close();
+    };
+    document.addEventListener("keydown", this.keydownHandler);
   }
 
-  /**
-   * Open the settings panel
-   */
   open() {
-    if (this.container) {
-      this.container.style.display = 'block';
-      this.isOpen = true;
-      // Add animation class
-      setTimeout(() => {
-        this.container.classList.add('settings-open');
-      }, 10);
-    }
+    if (!this.container) return;
+    this.container.style.display = "block";
+    this.isOpen = true;
+    // Next tick so the CSS transition has an initial frame to animate from.
+    setTimeout(() => this.container.classList.add("settings-open"), 10);
   }
 
-  /**
-   * Close the settings panel
-   */
   close() {
-    if (this.container) {
-      this.container.classList.remove('settings-open');
-      setTimeout(() => {
-        this.container.style.display = 'none';
-        this.isOpen = false;
-      }, 300); // Match CSS transition duration
+    if (!this.container) return;
+    this.container.classList.remove("settings-open");
+    // Match CSS transition duration so we hide only after it finishes.
+    setTimeout(() => {
+      this.container.style.display = "none";
+      this.isOpen = false;
+    }, 300);
+  }
+
+  async handleRefreshRating() {
+    const btn = this.container.querySelector("#settings-refresh-rating");
+    const originalText = btn.textContent;
+
+    try {
+      await runButtonWorkflow(btn, originalText, "⏳ Refreshing...", async () => {
+        const userData = await window.storage.get(window.storageKeys.USER_DATA);
+        const handle = userData?.username;
+        if (!handle) throw new Error("No user found");
+
+        const oldRating = unwrapUserFromStorage(
+          await window.storage.get(window.storageKeys.USER_INFO)
+        )?.rating ?? null;
+
+        // getOrCreateUser always re-syncs from Codeforces, so we can lean
+        // on it instead of duplicating the fetch here.
+        const updatedUser = await window.api.getOrCreateUser(handle);
+        const newRating = updatedUser.rating ?? null;
+        await window.storage.set(window.storageKeys.USER_INFO, [updatedUser]);
+
+        const ratingEl = this.container.querySelector("#settings-user-rating");
+        if (ratingEl) ratingEl.textContent = newRating ?? "—";
+        this.userData = { ...(this.userData || {}), rating: newRating };
+
+        if (oldRating !== newRating) {
+          await this.refreshProblemsForRating(handle, newRating);
+          if (window.refreshCalendar) window.refreshCalendar();
+          return "✅ All Updated!";
+        }
+        if (window.refreshCalendar) window.refreshCalendar();
+        return "✅ Updated!";
+      });
+    } catch (err) {
+      window.errorHandler.logError("SettingsPanel_refreshRating", err);
     }
   }
 
-  /**
-   * Handle refresh rating
-   */
-  async handleRefreshRating() {
-    const btn = this.container.querySelector('#settings-refresh-rating');
-    const originalText = btn.textContent;
-    
-    try {
-      btn.textContent = '⏳ Refreshing...';
-      btn.disabled = true;
-      
-      const userData = await window.storage.get(window.storageKeys.USER_DATA);
-      const handle = userData?.username;
-      
-      if (!handle) {
-        throw new Error('No user found');
-      }
-      
-      // Get old rating before refresh
-      const oldUserInfo = await window.storage.get(window.storageKeys.USER_INFO);
-      let oldRating = 800;
-      if (oldUserInfo && Array.isArray(oldUserInfo) && oldUserInfo.length > 0) {
-        const user = oldUserInfo[0][0] || oldUserInfo[0];
-        oldRating = user?.rating || 800;
-      }
-      
-      console.log('[SettingsPanel] Old rating:', oldRating);
-      
-      // Call backend to refresh rating from Codeforces API
-      const API_URL = window.config.current.API_URL;
-      const response = await fetch(`${API_URL}/users/refresh-rating`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ userID: handle })
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error ${response.status}`);
-      }
-      
-      const data = await response.json();
-      let updatedUser = data.message;
-      
-      // Extract user from array if needed
-      if (Array.isArray(updatedUser)) {
-        updatedUser = updatedUser[0];
-      }
-      
-      const newRating = updatedUser.rating || 800;
-      console.log('[SettingsPanel] New rating:', newRating);
-      
-      await window.storage.set(window.storageKeys.USER_INFO, [updatedUser]);
-      
-      // Update UI
-      const ratingValue = this.container.querySelector('#settings-user-rating');
-      if (ratingValue) {
-        ratingValue.textContent = newRating;
-      }
-      // Keep in-memory state in sync so future re-renders are correct
-      this.userData = { ...(this.userData || {}), rating: newRating };
-      
-      btn.textContent = '✅ Updated!';
-      
-      // If rating changed, automatically refresh problems
-      if (oldRating !== newRating) {
-        console.log('[SettingsPanel] Rating changed! Refreshing problems...');
-        btn.textContent = '✅ Updating problems...';
-        
-        // Refresh problems with new rating
-        await this.refreshProblemsForRating(handle, newRating);
-        
-        btn.textContent = '✅ All Updated!';
-      }
-      
-      setTimeout(() => {
-        btn.textContent = originalText;
-        btn.disabled = false;
-      }, 2000);
-      
-      // Refresh calendar
-      if (window.refreshCalendar) {
-        window.refreshCalendar();
-      }
-      
-    } catch (err) {
-      window.errorHandler.logError('SettingsPanel_refreshRating', err);
-      btn.textContent = '❌ Failed';
-      setTimeout(() => {
-        btn.textContent = originalText;
-        btn.disabled = false;
-      }, 2000);
-    }
-  }
-  
-  /**
-   * Refresh problems for a specific rating
-   * @param {string} handle - User handle
-   * @param {number} rating - New rating
-   */
   async refreshProblemsForRating(handle, rating) {
     try {
       const { month, year } = window.dateUtils.getCurrentMonthAndYear();
       const problemsData = await window.api.getMonthlyProblems(month, year, rating);
-      
-      // Format and store
-      const setupForm = new window.SetupForm();
-      const formattedProblems = setupForm.formatProblems(problemsData, month, year, rating);
-      
-      if (!formattedProblems || formattedProblems.length === 0) {
-        console.warn('[SettingsPanel] No problems found for new rating');
+      const formatted = new window.SetupForm().formatProblems(problemsData, month, year, rating);
+      if (!formatted || formatted.length === 0) {
+        console.warn("[settings] no problems found for rating", rating);
         return;
       }
-      
-      await window.storage.set(window.storageKeys.PROBLEM_DATA, formattedProblems);
-      console.log('[SettingsPanel] Problems refreshed for new rating:', rating);
-      
+      await window.storage.set(window.storageKeys.PROBLEM_DATA, formatted);
     } catch (err) {
-      console.error('[SettingsPanel] Error refreshing problems:', err);
-      // Don't throw, just log - rating was still updated
+      console.error("[settings] problem refresh failed:", err);
     }
   }
 
-  /**
-   * Handle refresh problems
-   */
   async handleRefreshProblems() {
-    const btn = this.container.querySelector('#settings-refresh-problems');
+    const btn = this.container.querySelector("#settings-refresh-problems");
     const originalText = btn.textContent;
-    
+
     try {
-      btn.textContent = '⏳ Refreshing...';
-      btn.disabled = true;
-      
-      const userData = await window.storage.get(window.storageKeys.USER_DATA);
-      const userInfo = await window.storage.get(window.storageKeys.USER_INFO);
-      const handle = userData?.username;
-      let rating = 800;
-      
-      if (userInfo && Array.isArray(userInfo) && userInfo.length > 0) {
-        const user = userInfo[0][0] || userInfo[0];
-        rating = user?.rating || 800;
-      }
-      
-      if (!handle) {
-        throw new Error('No user found');
-      }
-      
-      console.log('[SettingsPanel] Refreshing problems with rating:', rating);
-      
-      const { month, year } = window.dateUtils.getCurrentMonthAndYear();
-      const problemsData = await window.api.getMonthlyProblems(month, year, rating);
-      
-      // Format and store (reuse logic from SetupForm)
-      const setupForm = new window.SetupForm();
-      const formattedProblems = setupForm.formatProblems(problemsData, month, year, rating);
-      
-      if (!formattedProblems || formattedProblems.length === 0) {
-        throw new Error(`No problems found for ${month}/${year} with rating ${rating}`);
-      }
-      
-      await window.storage.set(window.storageKeys.PROBLEM_DATA, formattedProblems);
-      
-      btn.textContent = '✅ Updated!';
-      console.log('[SettingsPanel] Problems refreshed successfully:', formattedProblems.length, 'problems');
-      
-      setTimeout(() => {
-        btn.textContent = originalText;
-        btn.disabled = false;
-      }, 2000);
-      
-      // Refresh calendar
-      if (window.refreshCalendar) {
-        window.refreshCalendar();
-      }
-      
-    } catch (err) {
-      window.errorHandler.logError('SettingsPanel_refreshProblems', err);
-      const errorMsg = err.message || 'Failed to refresh';
-      btn.textContent = '❌ ' + (errorMsg.includes('404') || errorMsg.includes('No problems') ? 'No Data' : 'Failed');
-      setTimeout(() => {
-        btn.textContent = originalText;
-        btn.disabled = false;
+      await runButtonWorkflow(btn, originalText, "⏳ Refreshing...", async () => {
+        const userData = await window.storage.get(window.storageKeys.USER_DATA);
+        const userInfo = await window.storage.get(window.storageKeys.USER_INFO);
+        const handle = userData?.username;
+        const rating = unwrapUserFromStorage(userInfo)?.rating || 800;
+
+        if (!handle) throw new Error("No user found");
+
+        const { month, year } = window.dateUtils.getCurrentMonthAndYear();
+        const problemsData = await window.api.getMonthlyProblems(month, year, rating);
+        const formatted = new window.SetupForm().formatProblems(problemsData, month, year, rating);
+        if (!formatted || formatted.length === 0) {
+          throw new Error(`No problems found for ${month}/${year} with rating ${rating}`);
+        }
+
+        await window.storage.set(window.storageKeys.PROBLEM_DATA, formatted);
+        if (window.refreshCalendar) window.refreshCalendar();
+        return "✅ Updated!";
       }, 3000);
+    } catch (err) {
+      window.errorHandler.logError("SettingsPanel_refreshProblems", err);
     }
   }
 
-  /**
-   * Handle change user
-   */
   async handleChangeUser() {
-    const confirmed = confirm('This will clear your current data and show the setup screen. Continue?');
-    
-    if (confirmed) {
-      try {
-        // Clear all storage
-        await window.storage.clear();
-        
-        // Close settings
-        this.close();
-        
-        // Reload the page to show setup form
-        window.location.reload();
-        
-      } catch (err) {
-        window.errorHandler.logError('SettingsPanel_changeUser', err);
-        alert('Failed to change user. Please try again.');
-      }
+    const confirmed = confirm(
+      "This will clear your current data and show the setup screen. Continue?"
+    );
+    if (!confirmed) return;
+    try {
+      await window.storage.clear();
+      this.close();
+      window.location.reload();
+    } catch (err) {
+      window.errorHandler.logError("SettingsPanel_changeUser", err);
+      alert("Failed to change user. Please try again.");
     }
   }
 
-  /**
-   * Handle dark mode toggle
-   */
-  handleDarkModeToggle(enabled) {
-    // TODO: Implement dark mode in Sprint 3
-    console.log('[SettingsPanel] Dark mode:', enabled);
-    document.documentElement.classList.toggle('cf-potd-dark-mode', enabled);
-  }
-
-  /**
-   * Handle animations toggle
-   */
-  handleAnimationsToggle(enabled) {
-    console.log('[SettingsPanel] Animations:', enabled);
-    document.documentElement.classList.toggle('cf-potd-no-animations', !enabled);
-  }
-
-  /**
-   * Handle notifications toggle
-   */
-  handleNotificationsToggle(enabled) {
-    // TODO: Implement notifications in future sprint
-    console.log('[SettingsPanel] Notifications:', enabled);
-  }
-
-  /**
-   * Update user data
-   */
+  /** Update after external state changes (e.g. background rating sync). */
   updateUserData(userData) {
     this.userData = userData;
+    if (!this.container) return;
 
-    // Update UI if already rendered
-    if (this.container) {
-      const usernameEl = this.container.querySelector('#settings-user-handle');
-      const ratingEl = this.container.querySelector('#settings-user-rating');
-
-      if (usernameEl) usernameEl.textContent = userData?.username || 'Unknown';
-      if (ratingEl) {
-        ratingEl.textContent =
-          userData?.rating != null ? userData.rating : '—';
-      }
-    }
+    const usernameEl = this.container.querySelector("#settings-user-handle");
+    const ratingEl = this.container.querySelector("#settings-user-rating");
+    if (usernameEl) usernameEl.textContent = userData?.username || "Unknown";
+    if (ratingEl) ratingEl.textContent = userData?.rating != null ? userData.rating : "—";
   }
 
-  /**
-   * Destroy the panel
-   */
   destroy() {
+    if (this.keydownHandler) {
+      document.removeEventListener("keydown", this.keydownHandler);
+    }
     if (this.container && this.container.parentNode) {
       this.container.parentNode.removeChild(this.container);
     }
   }
 }
 
-// Export for use in content.js
 window.SettingsPanel = SettingsPanel;
-

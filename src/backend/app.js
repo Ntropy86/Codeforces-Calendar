@@ -1,48 +1,44 @@
 require("dotenv").config();
 require("./config/database").connect();
+
 const express = require("express");
-const bp = require("body-parser");
-const cors = require("cors"); // Add this for CORS support
+const cors = require("cors");
+
 const app = express();
 
-// === Set up CORS middleware ===
+// CORS is driven by CORS_ORIGIN env var (falls back to "*" only for local dev).
+// Example values:
+//   development: "*"
+//   production:  "chrome-extension://kdpcekneldcnkajbmabmfgdpcdjdmcfd"
+const corsOrigin = process.env.CORS_ORIGIN || "*";
 app.use(cors({
-  origin: "*", // Allow all origins for now
+  origin: corsOrigin,
   methods: ["GET", "POST", "PUT", "DELETE"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
-// === Import routes ===
-const userRoutes = require('./routes/userRoutes');
-const globalProblemSetRoutes = require('./routes/globalProblemSetRoutes');
-const filteredProblemSetRoutes = require('./routes/filteredProblemSetRoutes');
-const testRoutes = require('./routes/testRoutes');
-const testCronRoutes = require('./routes/testCronRoutes');
-
-// === Initialize scheduled jobs ===
-require('./cron/scheduledJobs');
-
-// === Middleware ===
 app.use(express.json());
-app.use(bp.json());
-app.use(bp.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true }));
 
-// === Test/Welcome/Status Check route ===
-app.get("/welcome", (req, res) => {
-	res.status(200).send("Welcome 🙌 ");
-});
+// Core routes
+app.use("/users", require("./routes/userRoutes"));
+app.use("/problemset", require("./routes/globalProblemSetRoutes"));
+app.use("/problemset", require("./routes/filteredProblemSetRoutes"));
 
-// === Routes ===
-app.use("/users", userRoutes);
-app.use("/problemset", globalProblemSetRoutes);
-app.use("/problemset", filteredProblemSetRoutes);
+// Test / cron-trigger routes are only exposed outside of production so they
+// can never be invoked against a live deployment.
+if (process.env.NODE_ENV !== "production") {
+  app.use("/test", require("./routes/testRoutes"));
+  app.use("/test/cron", require("./routes/testCronRoutes"));
+}
 
-// === Test routes ===
-app.use("/test", testRoutes);
-app.use("/test/cron", testCronRoutes);
+// Health check
+app.get("/welcome", (_req, res) => res.status(200).send("Welcome 🙌"));
 
-// POST /test/cron/update-global-problem-set
-// POST /test/cron/generate-filtered-problem-sets
-// POST /test/cron/cleanup-streak-data
+// Scheduled jobs (only when explicitly enabled — lets tests/one-off scripts
+// run the app without triggering cron).
+if (process.env.ENABLE_CRON === "true") {
+  require("./cron/scheduledJobs");
+}
 
 module.exports = app;

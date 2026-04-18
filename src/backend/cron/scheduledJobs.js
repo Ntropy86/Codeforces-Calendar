@@ -1,102 +1,58 @@
 /**
- * Scheduled jobs for Codeforces POTD backend
- * This file sets up cron jobs to run various maintenance tasks
+ * Scheduled jobs for the Codeforces POTD backend.
+ *
+ * All jobs run in IST to keep behaviour predictable for the primary user base.
+ * See cron.md for the full schedule and a runbook for manually triggering jobs.
  */
-const cron = require('node-cron');
-const mongoose = require('mongoose');
-const Models = require('../models/models');
-const User = mongoose.model('User', Models.userSchema);
-const filteredProblemSetService = require('../services/filteredProblemSetService');
-const globalProblemSetService = require('../services/globalProblemSetService');
-const userService = require('../services/userService');
+const cron = require("node-cron");
+const mongoose = require("mongoose");
+const Models = require("../models/models");
+const filteredProblemSetService = require("../services/filteredProblemSetService");
+const globalProblemSetService = require("../services/globalProblemSetService");
+const userService = require("../services/userService");
 
-console.log('Initializing scheduled jobs...');
+const User = mongoose.model("User", Models.userSchema);
 
-/**
- * Update global problem set daily at 5:11 AM
- * This job fetches new problems from Codeforces API and updates the database
- */
-cron.schedule('11 5 * * *', async () => {
-  try {
-    console.log('[CRON] Running scheduled global problem set update');
-    const stats = await globalProblemSetService.updateGlobalProblemSet();
-    console.log('[CRON] Global problem set update completed:', stats);
-  } catch (error) {
-    console.error('[CRON] Error in scheduled global problem set update:', error);
-  }
-},
-{
-  scheduled: true,
-  timezone: "Asia/Kolkata"  // Explicitly set to IST
-});
+const TIMEZONE = "Asia/Kolkata";
 
-// problem will change around 00:00 GMT
-cron.schedule('17 5 * * *', async () => {
-  try {
-    console.log('[CRON] Running daily problem set generation/update');
-    const stats = await filteredProblemSetService.generateFilteredProblemSets();
-    console.log('[CRON] Daily problem set generation completed:', stats);
-  } catch (error) {
-    console.error('[CRON] Error in daily problem set generation:', error);
-  }
-},
-{
-  scheduled: true,
-  timezone: "Asia/Kolkata"  // Explicitly set to IST
-});
-
-/**
- * Clean up old streak data weekly on Sunday at 6:07 AM
- * This job removes streak data older than 3 months to keep the database efficient
- */
-cron.schedule('07 6 * * 0', async () => {
-  try {
-    console.log('[CRON] Running scheduled streak data cleanup');
-    
-    // Get all users
-    const users = await User.find({});
-    console.log(`[CRON] Found ${users.length} users for streak cleanup`);
-    
-    let successCount = 0;
-    let errorCount = 0;
-    
-    // Process each user
-    for (const user of users) {
-      try {
-        if (user.userID) {
-          await userService.cleanupOldStreakDays(user.userID);
-          successCount++;
-        }
-      } catch (userError) {
-        console.error(`[CRON] Error cleaning up streak data for user ${user.userID}:`, userError);
-        errorCount++;
-      }
+const schedule = (expr, name, task) => {
+  cron.schedule(expr, async () => {
+    try {
+      console.log(`[cron] ${name} start`);
+      const result = await task();
+      console.log(`[cron] ${name} done`, result ?? "");
+    } catch (err) {
+      console.error(`[cron] ${name} failed:`, err);
     }
-    
-    console.log(`[CRON] Streak data cleanup completed. Success: ${successCount}, Errors: ${errorCount}`);
-  } catch (error) {
-    console.error('[CRON] Error in scheduled streak data cleanup:', error);
+  }, { scheduled: true, timezone: TIMEZONE });
+};
+
+// 1. Pull latest problems from the Codeforces API into our global set.
+schedule("11 5 * * *", "update-global-problem-set",
+  () => globalProblemSetService.updateGlobalProblemSet()
+);
+
+// 2. Regenerate the per-rating filtered sets used by the extension each day.
+//    Runs just after the global update to pick up any new problems.
+schedule("17 5 * * *", "generate-filtered-problem-sets",
+  () => filteredProblemSetService.generateFilteredProblemSets()
+);
+
+// 3. Trim streak_days entries older than 3 months so user docs stay compact.
+schedule("07 6 * * 0", "cleanup-old-streak-days", async () => {
+  const users = await User.find({}, { userID: 1 });
+  let ok = 0, fail = 0;
+  for (const { userID } of users) {
+    if (!userID) continue;
+    try {
+      await userService.cleanupOldStreakDays(userID);
+      ok++;
+    } catch (err) {
+      console.error(`[cron] cleanup failed for ${userID}:`, err.message);
+      fail++;
+    }
   }
-},
-{
-  scheduled: true,
-  timezone: "Asia/Kolkata"  // Explicitly set to IST
+  return { users: users.length, ok, fail };
 });
 
-
-// Keep the server alive with a self-ping every 5 minutes
-cron.schedule('*/5 * * * *', async () => {
-  try {
-    console.log('[CRON] Self-ping to keep service alive');
-    // This doesn't make an actual request, just logs to keep the instance active
-  } catch (error) {
-    console.error('[CRON] Error in keep-alive ping:', error);
-  }
-},
-{
-  scheduled: true,
-  timezone: "Asia/Kolkata"  // Explicitly set to IST
-});
-
-// Log that cron jobs are initialized
-console.log('Scheduled jobs initialized successfully');
+console.log("[cron] scheduled jobs initialized");

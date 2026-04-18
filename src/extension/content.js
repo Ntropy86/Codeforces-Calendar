@@ -1,261 +1,182 @@
 /**
- * Main content script for Codeforces POTD extension
- * Calendar-only architecture: No popup, everything inline
+ * Content script — calendar-only architecture.
+ *
+ * Renders the POTD calendar in the Codeforces sidebar, handles the onboarding
+ * setup form for first-time users, and owns the settings panel. Background
+ * syncs with our backend are fire-and-forget so the UI is never blocked.
  */
 
-// Track if calendar is already being refreshed to prevent loops
-// Use window property instead of local variable to avoid redeclaration errors
-if (typeof window.cfPotdIsRefreshing === 'undefined') {
+if (typeof window.cfPotdIsRefreshing === "undefined") {
   window.cfPotdIsRefreshing = false;
 }
 
-// Global settings panel instance
 let settingsPanelInstance = null;
 
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"
+];
+
+// ---------- storage helpers ----------
+
 /**
- * Initialize the extension
- * Check if user exists, show setup form or calendar accordingly
+ * userInfo in storage is sometimes `[user]`, sometimes `[[user]]` depending
+ * on who wrote it last. Tolerate both until the data layer is flattened in
+ * the standardize-data sprint.
  */
+function unwrapUser(userInfo) {
+  if (!userInfo) return null;
+  if (Array.isArray(userInfo) && userInfo.length > 0) {
+    return Array.isArray(userInfo[0]) ? userInfo[0][0] : userInfo[0];
+  }
+  if (typeof userInfo === "object") return userInfo;
+  return null;
+}
+
+function extractUserRating(userInfo) {
+  return unwrapUser(userInfo)?.rating ?? null;
+}
+
+function extractUserHandle(userInfo, userData) {
+  return unwrapUser(userInfo)?.userID || userData?.username || "Unknown";
+}
+
+// ---------- bootstrapping ----------
+
 async function initializeExtension() {
-  console.log('[CF-POTD] Initializing extension...');
-  
+  window.log.debug("[cf-potd] initializing");
+
   try {
-    // Check if user data exists
     const userData = await window.storage.get(window.storageKeys.USER_DATA);
     const userInfo = await window.storage.get(window.storageKeys.USER_INFO);
     const problemData = await window.storage.get(window.storageKeys.PROBLEM_DATA);
-    
+
     const hasUser = userData && userData.username;
     const hasData = userInfo && problemData;
-    
-    console.log('[CF-POTD] User exists:', hasUser, 'Has data:', hasData);
-    
+
     if (!hasUser || !hasData) {
-      // Show setup form
       showSetupForm();
-    } else {
-      // Show calendar immediately (uses cached data — fast path)
-      await createCalendar();
-
-      // Initialize settings panel (hidden by default)
-      await initializeSettingsPanel();
-
-      // Fire-and-forget: silently sync rating with backend.
-      // If Codeforces rating has changed since last login, this will update
-      // the stored user, refresh problems, and re-render the UI.
-      syncUserInBackground();
+      return;
     }
+
+    // Fast path: render from cache, then reconcile with backend.
+    await createCalendar();
+    await initializeSettingsPanel();
+    syncUserInBackground();
   } catch (error) {
-    window.errorHandler.logError('initializeExtension', error);
+    window.errorHandler.logError("initializeExtension", error);
   }
 }
 
 /**
- * Silently sync the stored user's rating with the backend.
+ * Silently reconcile the stored user with the backend.
  *
- * The backend's POST /users endpoint is the single source of truth:
- * it always fetches the latest rating from the Codeforces API and
- * returns the synced user. This function compares that fresh rating
- * against the one currently in chrome.storage; if it has drifted, we
- * refresh problems for the new rating and update the UI.
- *
- * Runs fire-and-forget so it never blocks the calendar render. Failures
- * are logged but do not surface as errors — the extension keeps working
- * with cached data when the backend is unreachable.
+ * Our POST /users endpoint always pulls the latest rating from Codeforces,
+ * so if the rating has drifted we refresh problems for the new rating bucket
+ * and re-render. Failures are non-fatal — the extension keeps working with
+ * cached data when the backend is unreachable.
  */
 async function syncUserInBackground() {
   try {
     const userData = await window.storage.get(window.storageKeys.USER_DATA);
     const handle = userData?.username;
-    if (!handle) {
+    if (!handle) return;
+
+    const oldRating = extractUserRating(
+      await window.storage.get(window.storageKeys.USER_INFO)
+    );
+
+    const freshUser = await window.api.getOrCreateUser(handle);
+    const newRating = freshUser?.rating ?? null;
+    await window.storage.set(window.storageKeys.USER_INFO, [freshUser]);
+
+    if (oldRating === newRating) {
+      window.log.debug(`[cf-potd] rating unchanged (${newRating})`);
       return;
     }
 
-    // Capture cached rating for drift detection
-    const oldUserInfo = await window.storage.get(window.storageKeys.USER_INFO);
-    let oldRating = null;
-    if (oldUserInfo && Array.isArray(oldUserInfo) && oldUserInfo.length > 0) {
-      const u = oldUserInfo[0][0] || oldUserInfo[0];
-      oldRating = u?.rating ?? null;
-    } else if (oldUserInfo && typeof oldUserInfo === 'object') {
-      oldRating = oldUserInfo.rating ?? null;
+    console.log(`[cf-potd] rating drift ${oldRating} -> ${newRating}, refreshing`);
+
+    try {
+      const { month, year } = window.dateUtils.getCurrentMonthAndYear();
+      const problemsData = await window.api.getMonthlyProblems(month, year, newRating);
+      const formattedProblems = new window.SetupForm()
+        .formatProblems(problemsData, month, year, newRating);
+      if (formattedProblems && formattedProblems.length > 0) {
+        await window.storage.set(window.storageKeys.PROBLEM_DATA, formattedProblems);
+      }
+    } catch (err) {
+      console.warn("[cf-potd] problem refresh after rating change failed:", err.message);
     }
 
-    console.log(`[CF-POTD] Background sync: handle=${handle}, cached rating=${oldRating}`);
-
-    // Hit backend — idempotent; always syncs rating with Codeforces
-    const freshUser = await window.api.getOrCreateUser(handle);
-    const newRating = freshUser?.rating ?? null;
-
-    // Persist the freshest user record
-    await window.storage.set(window.storageKeys.USER_INFO, [freshUser]);
-
-    if (oldRating !== newRating) {
-      console.log(
-        `[CF-POTD] Rating changed: ${oldRating} -> ${newRating}. Refreshing UI...`
-      );
-
-      // Refresh monthly problems to match the new rating bucket
-      try {
-        const { month, year } = window.dateUtils.getCurrentMonthAndYear();
-        const problemsData = await window.api.getMonthlyProblems(
-          month,
-          year,
-          newRating
-        );
-        const setupForm = new window.SetupForm();
-        const formattedProblems = setupForm.formatProblems(
-          problemsData,
-          month,
-          year,
-          newRating
-        );
-        if (formattedProblems && formattedProblems.length > 0) {
-          await window.storage.set(
-            window.storageKeys.PROBLEM_DATA,
-            formattedProblems
-          );
-        }
-      } catch (err) {
-        console.warn(
-          '[CF-POTD] Problem refresh after rating change failed:',
-          err.message
-        );
-      }
-
-      // Update the open Settings panel (if any) so UI matches storage
-      if (settingsPanelInstance) {
-        settingsPanelInstance.updateUserData({
-          username: handle,
-          rating: newRating
-        });
-      }
-
-      // Re-render the calendar with new problems
-      if (window.refreshCalendar) {
-        window.refreshCalendar();
-      }
-    } else {
-      console.log(`[CF-POTD] Rating unchanged (${newRating}). No refresh needed.`);
+    if (settingsPanelInstance) {
+      settingsPanelInstance.updateUserData({ username: handle, rating: newRating });
     }
+    if (window.refreshCalendar) window.refreshCalendar();
   } catch (err) {
-    console.warn('[CF-POTD] Background sync failed (non-critical):', err.message);
+    console.warn("[cf-potd] background sync failed (non-critical):", err.message);
   }
 }
 
-/**
- * Show the setup form for first-time users
- */
+// ---------- setup form ----------
+
 function showSetupForm() {
-  console.log('[CF-POTD] Showing setup form...');
-  
-  const sidebar = document.getElementById('sidebar');
+  const sidebar = document.getElementById("sidebar");
   if (!sidebar) {
-    console.error('[CF-POTD] Sidebar not found, cannot show setup form');
+    console.error("[cf-potd] sidebar not found, cannot show setup form");
     return;
   }
-  
-  // Create setup form instance
+
   const setupForm = new window.SetupForm();
-  
-  // Override the onSetupComplete callback
   setupForm.onSetupComplete = async () => {
-    console.log('[CF-POTD] Setup complete, loading calendar...');
-    
     try {
-      // Destroy setup form first
       setupForm.destroy();
-      
-      // Small delay to ensure DOM is ready
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // Create calendar
+      // Let the DOM settle before re-rendering where the form just was.
+      await new Promise((resolve) => setTimeout(resolve, 100));
       await createCalendar();
-      console.log('[CF-POTD] Calendar created successfully');
-      
-      // Initialize settings panel (reads merged USER_DATA + USER_INFO internally)
       await initializeSettingsPanel();
-      
     } catch (error) {
-      console.error('[CF-POTD] Error in setup complete:', error);
-      alert('Error loading calendar. Please refresh the page.');
+      console.error("[cf-potd] setup completion failed:", error);
+      alert("Error loading calendar. Please refresh the page.");
     }
   };
-  
-  // Render and insert the form
-  const formElement = setupForm.render();
-  sidebar.insertAdjacentElement('afterbegin', formElement);
+
+  sidebar.insertAdjacentElement("afterbegin", setupForm.render());
 }
 
-/**
- * Initialize the settings panel.
- *
- * Merges the "thin" USER_DATA ({username}) with the "full" USER_INFO
- * (DB record containing rating, streak, etc.) so the panel can render
- * the correct handle + rating. Legacy USER_INFO is stored wrapped in an
- * array, so we unwrap it defensively.
- */
-async function initializeSettingsPanel() {
-  console.log('[CF-POTD] Initializing settings panel...');
+// ---------- settings panel ----------
 
-  if (settingsPanelInstance) {
-    settingsPanelInstance.destroy();
-  }
+async function initializeSettingsPanel() {
+  if (settingsPanelInstance) settingsPanelInstance.destroy();
 
   const userData = await window.storage.get(window.storageKeys.USER_DATA);
   const userInfo = await window.storage.get(window.storageKeys.USER_INFO);
 
-  let rating = null;
-  if (userInfo && Array.isArray(userInfo) && userInfo.length > 0) {
-    const user = userInfo[0][0] || userInfo[0];
-    rating = user?.rating ?? null;
-  } else if (userInfo && typeof userInfo === 'object') {
-    rating = userInfo.rating ?? null;
-  }
-
-  const mergedData = {
-    username: userData?.username || 'Unknown',
-    rating: rating
-  };
-
-  console.log('[CF-POTD] Settings panel data:', mergedData);
-
-  settingsPanelInstance = new window.SettingsPanel(mergedData);
-  const panelElement = settingsPanelInstance.render();
-  document.body.appendChild(panelElement);
-
-  console.log('[CF-POTD] Settings panel initialized');
+  settingsPanelInstance = new window.SettingsPanel({
+    username: userData?.username || "Unknown",
+    rating: extractUserRating(userInfo)
+  });
+  document.body.appendChild(settingsPanelInstance.render());
 }
 
-/**
- * Add settings gear icon to calendar header
- */
 function addSettingsIcon() {
-  const calendarHeader = document.querySelector('.calendar-header th');
+  const calendarHeader = document.querySelector(".calendar-header th");
   if (!calendarHeader) {
-    console.warn('[CF-POTD] Calendar header not found');
+    console.warn("[cf-potd] calendar header not found");
     return;
   }
-  
-  // Check if icon already exists
-  if (calendarHeader.querySelector('.calendar-settings-icon')) {
-    return;
-  }
-  
-  // Create settings icon button
-  const settingsBtn = document.createElement('button');
-  settingsBtn.className = 'calendar-settings-icon';
-  settingsBtn.innerHTML = '⚙️';
-  settingsBtn.title = 'Settings';
-  settingsBtn.addEventListener('click', (e) => {
+  if (calendarHeader.querySelector(".calendar-settings-icon")) return;
+
+  const settingsBtn = document.createElement("button");
+  settingsBtn.className = "calendar-settings-icon";
+  settingsBtn.innerHTML = "⚙️";
+  settingsBtn.title = "Settings";
+  settingsBtn.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (settingsPanelInstance) {
-      settingsPanelInstance.open();
-    }
+    if (settingsPanelInstance) settingsPanelInstance.open();
   });
-  
-  // Wrap header content
+
   const headerText = calendarHeader.innerHTML;
   calendarHeader.innerHTML = `
     <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -263,166 +184,121 @@ function addSettingsIcon() {
       <span style="margin-left: auto;"></span>
     </div>
   `;
-  
-  const rightSection = calendarHeader.querySelector('span:last-child');
-  rightSection.appendChild(settingsBtn);
+  calendarHeader.querySelector("span:last-child").appendChild(settingsBtn);
 }
 
-// Define createCalendar function first before it's referenced
+// ---------- calendar ----------
+
 async function createCalendar() {
-  console.log("createCalendar: Called");
   try {
-    window.dateUtils.logDateDebugInfo();
-    
     const currentDate = new Date();
-    const slicedDate = window.dateUtils.getTodayISO(); // Use the updated UTC method
-    console.log("Current date (ISO UTC):", slicedDate);
+    const currentYear = currentDate.getUTCFullYear();
+    const currentMonth = currentDate.getUTCMonth();
+    const displayMonth = currentMonth + 1;
 
-    const currentYear = currentDate.getUTCFullYear(); // Use UTC year
-    const currentMonth = currentDate.getUTCMonth(); // Use UTC month
-    const displayMonth = currentMonth + 1; // Adjust for display
-
-    const monthNames = [
-      "January", "February", "March", "April", "May", "June",
-      "July", "August", "September", "October", "November", "December"
-    ];
-
-    // Retrieve all needed data from storage
     const result = await window.storage.getMultiple([
-      window.storageKeys.PROBLEM_DATA, 
-      window.storageKeys.USER_INFO, 
+      window.storageKeys.PROBLEM_DATA,
+      window.storageKeys.USER_INFO,
       window.storageKeys.USER_DATA
     ]);
-    
-    console.log("createCalendar: Retrieved storage data", result);
-    console.log("Raw userInfo:", result.userInfo);
-    
-    const problemData = result.problemData || [];
-    console.log("Problem data:", problemData);
-    
-    // Extract user handle from multiple possible sources
-    let userHandle = "Unknown";
-    
-    // Check userInfo first (backend data)
-    if (result.userInfo && Array.isArray(result.userInfo) && result.userInfo.length > 0) {
-      if (result.userInfo[0] && Array.isArray(result.userInfo[0]) && result.userInfo[0].length > 0) {
-        const user = result.userInfo[0][0];
-        console.log("User info for calendar:", user);
-        
-        // Check for userID field first (backend format)
-        if (user && user.userID) {
-          userHandle = user.userID;
-          console.log("Using userID from userInfo:", userHandle);
-        }
-      }
-    }
-    
-    // If still Unknown, try userData (what the user entered)
-    if (userHandle === "Unknown" && result.userData && result.userData.username) {
-      userHandle = result.userData.username;
-      console.log("Using username from userData:", userHandle);
-    }
 
-    // Synchronize streak days with database last_streak_date
+    const problemData = result.problemData || [];
+    const userHandle = extractUserHandle(result.userInfo, result.userData);
+
     if (userHandle !== "Unknown") {
       try {
         await window.streak.syncStreakDaysWithDatabase(userHandle);
       } catch (error) {
-        window.errorHandler.logError('createCalendar_syncStreak', error);
+        window.errorHandler.logError("createCalendar_syncStreak", error);
       }
-    }
-    
-    // Check if streak should be reset and do it automatically
-    if (userHandle !== "Unknown") {
+
       try {
-        const shouldReset = await window.streak.shouldResetStreak();
-        if (shouldReset) {
-          console.log("Streak was automatically reset due to gap in solving");
-          // Only reset the streak count, don't update the streak date
-          const streakCount = 0;
-          const updatedUser = await window.api.updateUserStreak(userHandle, streakCount);
-          
-          // Update local storage with the reset user data
+        if (await window.streak.shouldResetStreak()) {
+          console.log("[cf-potd] auto-resetting streak due to gap");
+          const updatedUser = await window.api.updateUserStreak(userHandle, 0);
           if (updatedUser) {
             await window.storage.set(window.storageKeys.USER_INFO, [updatedUser]);
-            console.log("Streak reset in backend:", updatedUser);
           }
         }
       } catch (error) {
-        window.errorHandler.logError('createCalendar_streakCheck', error);
+        window.errorHandler.logError("createCalendar_streakCheck", error);
       }
     }
 
     if (!window.cfPotdIsRefreshing && userHandle !== "Unknown") {
-      try {
-        const todayISO = window.dateUtils.getTodayISO(); // This now uses the UTC method
-        console.log("Today's ISO date for submission check:", todayISO);
-        
-        const todaysProblem = problemData.find(function(problem) {
-          if (!problem || !problem.date) return false;
-          const problemDate = problem.date.split("T")[0];
-          return problemDate === todayISO;
-        });
-        
-        console.log("TODAYYYYYY", userHandle, todayISO, todaysProblem ? "Found today's problem" : "No problem for today");
-        
-        if (todaysProblem) {
-          // Check if already verified to avoid unnecessary API calls
-          const lastSolvedDate = await window.storage.get(window.storageKeys.LAST_SOLVED_DATE);
-          if (lastSolvedDate !== todayISO) {
-            console.log("Checking for today's submission, not verified yet");
-            // Use our API wrapper with retry logic to check submission
-            const result = await window.api.verifySubmission(userHandle, todaysProblem);
-            console.log("RESULT checkForTodaySubmission: Submission verification result", result);
-            
-            if (result.verified) {
-              console.log('TODAY Submission verified! Updating streak...');
-              
-              // Mark the date as already checked to avoid redundant checks
-              await window.storage.set(window.storageKeys.LAST_SOLVED_DATE, todayISO);
-              
-              // Update streak but don't trigger a refresh - we'll update the UI directly
-              await updateStreakAfterVerification(userHandle, todaysProblem);
-            }
-          } else {
-            console.log(`Today's submission already verified (${todayISO})`);
-          }
-        }
-      } catch (error) {
-        console.error("Error checking today's submission:", error);
-      }
+      await maybeVerifyTodaysSubmission(userHandle, problemData);
     }
-    
-    // Get streak count directly from userInfo (the database source of truth)
-    let streakCount = 0;
-    try {
-      // Get the streak count dynamically instead of using the stored value
-      streakCount = await window.streak.getCurrentStreak();
-      console.log("Dynamically calculated streak for calendar:", streakCount);
-    } catch (error) {
-      console.error("Error getting dynamic streak count:", error);
-      
-      // Fallback to stored streak count if needed
-      if (result.userInfo && Array.isArray(result.userInfo) && result.userInfo.length > 0 && result.userInfo[0].length > 0) {
-        const user = result.userInfo[0][0];
-        if (user && user.streak && user.streak.last_streak_count !== undefined) {
-          if (typeof user.streak.last_streak_count === 'number') {
-            streakCount = user.streak.last_streak_count;
-          } else {
-            streakCount = parseInt(user.streak.last_streak_count);
-          }
-          console.log("Falling back to stored streak count:", streakCount);
-        }
-      }
-    }
-    console.log("Final streak for calendar:", streakCount);
 
-    // Render the calendar HTML
-    let calendarHTML = `
+    const streakCount = await computeStreakCount(result.userInfo);
+
+    const calendarHTML = buildCalendarHTML({
+      currentYear, currentMonth, displayMonth,
+      userHandle, streakCount, problemData,
+      referenceDate: currentDate.getUTCDate()
+    });
+
+    injectCalendar(calendarHTML);
+  } catch (error) {
+    window.errorHandler.logError("createCalendar", error);
+  } finally {
+    window.cfPotdIsRefreshing = false;
+  }
+
+  markCalendarBasedOnStreak();
+}
+
+async function maybeVerifyTodaysSubmission(userHandle, problemData) {
+  try {
+    const todayISO = window.dateUtils.getTodayISO();
+    const todaysProblem = problemData.find((p) => {
+      if (!p || !p.date) return false;
+      return p.date.split("T")[0] === todayISO;
+    });
+    if (!todaysProblem) return;
+
+    const lastSolvedDate = await window.storage.get(window.storageKeys.LAST_SOLVED_DATE);
+    if (lastSolvedDate === todayISO) {
+      window.log.debug(`[cf-potd] today already verified (${todayISO})`);
+      return;
+    }
+
+    const result = await window.api.verifySubmission(userHandle, todaysProblem);
+    if (result.verified) {
+      console.log("[cf-potd] today's submission verified, updating streak");
+      await window.storage.set(window.storageKeys.LAST_SOLVED_DATE, todayISO);
+      await updateStreakAfterVerification(userHandle, todaysProblem);
+    }
+  } catch (error) {
+    console.error("[cf-potd] submission check failed:", error);
+  }
+}
+
+async function computeStreakCount(userInfo) {
+  try {
+    return await window.streak.getCurrentStreak();
+  } catch (error) {
+    console.error("[cf-potd] streak calc failed, falling back to cached:", error.message);
+    const user = unwrapUser(userInfo);
+    const cached = user?.streak?.last_streak_count;
+    if (cached === undefined) return 0;
+    return typeof cached === "number" ? cached : parseInt(cached, 10) || 0;
+  }
+}
+
+function buildCalendarHTML({ currentYear, currentMonth, displayMonth, userHandle, streakCount, problemData, referenceDate }) {
+  const firstDay = new Date(Date.UTC(currentYear, currentMonth, 1)).getUTCDay();
+  const daysInMonth = new Date(Date.UTC(currentYear, currentMonth + 1, 0)).getUTCDate();
+
+  const problemByDate = new Map();
+  for (const p of problemData) {
+    if (p && p.date) problemByDate.set(p.date.split("T")[0], p);
+  }
+
+  let html = `
     <div class="cf-potd-container">
       <table class="calendar">
         <tr class="calendar-header">
-          <th colspan="7">${monthNames[currentMonth]} ${currentYear}</th>
+          <th colspan="7">${MONTH_NAMES[currentMonth]} ${currentYear}</th>
         </tr>
         <tr class="user-info-row">
           <td colspan="7">
@@ -437,340 +313,176 @@ async function createCalendar() {
           </td>
         </tr>
         <tr class="day-header">
-          <th>Sun</th>
-          <th>Mon</th>
-          <th>Tue</th>
-          <th>Wed</th>
-          <th>Thu</th>
-          <th>Fri</th>
-          <th>Sat</th>
+          <th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th>
+          <th>Thu</th><th>Fri</th><th>Sat</th>
         </tr>
-    `;
+  `;
 
-    // Determine first day and number of days in the month using UTC
-    const firstDay = new Date(Date.UTC(currentYear, currentMonth, 1)).getUTCDay();
-    const daysInMonth = new Date(Date.UTC(currentYear, currentMonth + 1, 0)).getUTCDate();
-    let day = 1;
-    const referenceDate = currentDate.getUTCDate(); // today's day-of-month in UTC
+  let day = 1;
+  for (let i = 0; i < 6; i++) {
+    html += "<tr>";
+    for (let j = 0; j < 7; j++) {
+      if (i === 0 && j < firstDay) {
+        html += "<td></td>";
+      } else if (day > daysInMonth) {
+        html += "<td></td>";
+      } else {
+        const formattedMonth = displayMonth.toString().padStart(2, "0");
+        const formattedDay = day.toString().padStart(2, "0");
+        const isoDate = `${currentYear}-${formattedMonth}-${formattedDay}`;
 
-    for (let i = 0; i < 6; i++) {
-      calendarHTML += "<tr>";
-      for (let j = 0; j < 7; j++) {
-        if (i === 0 && j < firstDay) {
-          calendarHTML += "<td></td>"; // Empty cell, no content
-        } else if (day > daysInMonth) {
-          calendarHTML += "<td></td>"; // Empty cell for days beyond this month
-        } else {
-          const formattedMonth = displayMonth.toString().padStart(2, "0");
-          const formattedDay = day.toString().padStart(2, "0");
-          const isoDate = `${currentYear}-${formattedMonth}-${formattedDay}`;
-          
-          // Find problem for this day
-          let url = "";
-          let cellClass = "";
-          
-          if (day < referenceDate) {
-            cellClass = "past";
-          } else if (day === referenceDate) {
-            cellClass = "today";
-          } else {
-            cellClass = "future";
-          }
-          
-          if (problemData && problemData.length > 0) {
-            const filteredProblems = problemData.filter(function(problem) {
-              if (!problem || !problem.date) return false;
-              const problemDate = problem.date.split("T")[0];
-              return problemDate === isoDate;
-            });
-            
-            if (filteredProblems.length > 0 && filteredProblems[0].url) {
-              url = filteredProblems[0].url;
-            }
-          }
-          
-          // Only hyperlink if a URL exists and the day is today or in the past
-          const cellContent = (url && day <= referenceDate) 
-            ? `<a href="${url}" target="_blank">${day}</a>` 
-            : day;
-          
-          calendarHTML += `<td class="${cellClass}" data-date="${isoDate}">${cellContent}</td>`;
-          day++;
-        }
-      }
-      calendarHTML += "</tr>";
-      if (day > daysInMonth && i < 5) {
-        // Add empty row at the end if needed for consistent layout
-        calendarHTML += "<tr>" + "<td></td>".repeat(7) + "</tr>";
+        const cellClass = day < referenceDate ? "past"
+          : day === referenceDate ? "today"
+          : "future";
+
+        const url = problemByDate.get(isoDate)?.url || "";
+        const cellContent = (url && day <= referenceDate)
+          ? `<a href="${url}" target="_blank">${day}</a>`
+          : day;
+
+        html += `<td class="${cellClass}" data-date="${isoDate}">${cellContent}</td>`;
+        day++;
       }
     }
-    calendarHTML += "</table></div>";
-
-    // Find or create the sidebar element
-    let sidebar = document.getElementById("sidebar");
-    if (!sidebar) {
-      // If sidebar doesn't exist, create a new one
-      const pageContent = document.querySelector('.content-with-sidebar');
-      if (pageContent) {
-        sidebar = document.createElement('div');
-        sidebar.id = 'sidebar';
-        sidebar.className = 'sidebar';
-        pageContent.appendChild(sidebar);
-      }
+    html += "</tr>";
+    if (day > daysInMonth && i < 5) {
+      html += "<tr>" + "<td></td>".repeat(7) + "</tr>";
     }
-    
-    if (sidebar) {
-      const existingCalendar = sidebar.querySelector(".calendar");
-      if (existingCalendar) {
-        const container = existingCalendar.closest('.cf-potd-container');
-        if (container) {
-          container.remove();
-          console.log("createCalendar: Removed existing calendar.");
-        }
-      }
-      sidebar.insertAdjacentHTML("afterbegin", calendarHTML);
-      console.log("createCalendar: Calendar injected successfully.");
-      
-      // Add settings icon to calendar header
-      addSettingsIcon();
-    } else {
-      console.error("createCalendar: Sidebar element not found.");
-    }
-  } catch (error) {
-    window.errorHandler.logError('createCalendar', error);
-  } finally {
-    // Reset the refreshing flag
-    window.cfPotdIsRefreshing = false;
   }
-  
-  // Mark calendar based on streak data
-  markCalendarBasedOnStreak();
+  html += "</table></div>";
+  return html;
 }
 
-// Define refreshCalendar after createCalendar is defined
-window.refreshCalendar = function() {
-  console.log("Refreshing calendar due to streak changes");
-  
-  // If already refreshing, don't start another refresh
-  if (window.cfPotdIsRefreshing) {
-    console.log("Calendar refresh already in progress, skipping");
+function injectCalendar(calendarHTML) {
+  let sidebar = document.getElementById("sidebar");
+  if (!sidebar) {
+    const pageContent = document.querySelector(".content-with-sidebar");
+    if (pageContent) {
+      sidebar = document.createElement("div");
+      sidebar.id = "sidebar";
+      sidebar.className = "sidebar";
+      pageContent.appendChild(sidebar);
+    }
+  }
+  if (!sidebar) {
+    console.error("[cf-potd] sidebar element not found");
     return;
   }
-  
-  // Set the refreshing flag to prevent loops
-  window.cfPotdIsRefreshing = true;
-  
-  // Get the existing calendar and remove it
-  const existingCalendar = document.querySelector(".cf-potd-container");
-  if (existingCalendar) {
-    existingCalendar.remove();
+
+  const existing = sidebar.querySelector(".calendar");
+  if (existing) {
+    existing.closest(".cf-potd-container")?.remove();
   }
-  
-  // Create a new calendar - the isRefreshing flag will prevent submission checks
+  sidebar.insertAdjacentHTML("afterbegin", calendarHTML);
+  addSettingsIcon();
+}
+
+window.refreshCalendar = function () {
+  if (window.cfPotdIsRefreshing) return;
+  window.cfPotdIsRefreshing = true;
+
+  document.querySelector(".cf-potd-container")?.remove();
   createCalendar();
 };
 
-// Update streak after verification without triggering a calendar refresh
-async function updateStreakAfterVerification(userHandle, todaysProblem) {
+// ---------- streak post-verification ----------
+
+async function updateStreakAfterVerification(userHandle) {
   try {
-    // Check if streak should be reset - THIS ONLY AFFECTS THE COUNTER, NOT THE HISTORY
     const shouldReset = await window.streak.shouldResetStreak();
-    
-    // Calculate new streak value based on whether we should reset the counter
-    let newStreak;
-    if (shouldReset) {
-      // For a reset, start at 1 (today's solve)
-      newStreak = 1;
-      console.log("Resetting streak counter due to gap in solving");
-    } else {
-      // Otherwise increment
-      const currentStreak = await window.streak.getCurrentStreak();
-      newStreak = currentStreak + 1;
-    }
-    
-    // We always want to update the date for a successful validation
-    const updateDate = true;
-    
-    // Update backend with new streak count and mark today as solved
-    const updatedUser = await window.api.updateUserStreak(userHandle, newStreak, updateDate);
-    console.log("Updated user from backend:", updatedUser);
-    
-    // Update userInfo in local storage with fresh data from backend
+    const newStreak = shouldReset
+      ? 1
+      : (await window.streak.getCurrentStreak()) + 1;
+
+    const updatedUser = await window.api.updateUserStreak(userHandle, newStreak, true);
     await window.storage.set(window.storageKeys.USER_INFO, [updatedUser]);
-    
-    // Update the streak UI in the calendar
+
     updateStreakUI(newStreak);
-    
-    // Mark today's cell as solved
     markCalendarTick();
-    
-    console.log(`Streak ${shouldReset ? "reset and " : ""}updated to ${newStreak}`);
-    
-    // Sync streak days with database
+
     await window.streak.syncStreakDaysWithDatabase(userHandle);
-    
-    return {
-      success: true,
-      newStreak: newStreak,
-      wasReset: shouldReset
-    };
+    return { success: true, newStreak, wasReset: shouldReset };
   } catch (error) {
-    console.error("Error updating streak after verification:", error);
-    return {
-      success: false,
-      error: error.message
-    };
+    console.error("[cf-potd] updateStreakAfterVerification failed:", error);
+    return { success: false, error: error.message };
   }
 }
 
-// Mark today's cell as solved
+function appendCheckmark(cell) {
+  if (cell.innerHTML.includes("✔")) return;
+  const anchor = cell.querySelector("a");
+  if (anchor) {
+    anchor.insertAdjacentHTML("afterend", ' <span class="checkmark">✔</span>');
+  } else {
+    cell.innerHTML += ' <span class="checkmark">✔</span>';
+  }
+}
+
 function markCalendarTick() {
-  console.log("markCalendarTick: Marking today's cell as solved.");
   const todayISO = window.dateUtils.getTodayISO();
-  console.log("Today's ISO date for markCalendarTick:", todayISO);
-  
-  const calendarCells = document.querySelectorAll(".calendar td");
-  
-  calendarCells.forEach(function(cell) {
+  document.querySelectorAll(".calendar td").forEach((cell) => {
     if (cell.getAttribute("data-date") === todayISO) {
       cell.classList.add("solved");
-      
-      // Only add checkmark if it doesn't already have one
-      if (!cell.innerHTML.includes("✔")) {
-        // If the cell has a link, add checkmark after the link
-        if (cell.querySelector('a')) {
-          cell.querySelector('a').insertAdjacentHTML('afterend', ' <span class="checkmark">✔</span>');
-        } else {
-          cell.innerHTML += ' <span class="checkmark">✔</span>';
-        }
-      }
-      console.log("markCalendarTick: Marked cell for", todayISO);
+      appendCheckmark(cell);
     }
   });
 }
 
-// Mark calendar cells based on streak data
+/**
+ * Mark cells for every date the user has solved, based on streak data.
+ * Uses getDatesToMarkSolved() first; falls back to reading streak_days
+ * directly from storage if that returns empty (handles upgrade paths where
+ * the two data sources temporarily disagree).
+ */
 async function markCalendarBasedOnStreak() {
-  console.log("markCalendarBasedOnStreak: Marking cells based on streak data");
-  
   try {
-    // Get dates to mark as solved from streak service
     const datesToMark = await window.streak.getDatesToMarkSolved();
-    console.log("Dates to mark as solved:", datesToMark);
-    
-    // Get all calendar cells
-    const calendarCells = document.querySelectorAll(".calendar td");
-    console.log("Calendar cells found:", calendarCells.length);
-    
+    const cells = document.querySelectorAll(".calendar td");
+
     if (datesToMark.length === 0) {
-      console.log("No dates to mark as solved - checking directly from userInfo");
-      
-      // As a fallback, try to get the user info directly
-      const userInfo = await window.storage.get(window.storageKeys.USER_INFO);
-      console.log("Raw userInfo in markCalendarBasedOnStreak:", userInfo);
-      
-      // Try to extract streak days directly
-      let streakDays = {};
-      
-      if (userInfo && Array.isArray(userInfo) && userInfo.length > 0) {
-        if (Array.isArray(userInfo[0]) && userInfo[0].length > 0) {
-          const user = userInfo[0][0];
-          if (user && user.streak && user.streak.streak_days) {
-            streakDays = user.streak.streak_days;
-            console.log("Directly extracted streak days:", streakDays);
-          }
-        } else if (userInfo[0] && userInfo[0].streak && userInfo[0].streak.streak_days) {
-          streakDays = userInfo[0].streak.streak_days;
-          console.log("Directly extracted streak days:", streakDays);
+      const streakDays = unwrapUser(
+        await window.storage.get(window.storageKeys.USER_INFO)
+      )?.streak?.streak_days || {};
+
+      if (Object.keys(streakDays).length === 0) return;
+
+      cells.forEach((cell) => {
+        const cellDate = cell.getAttribute("data-date");
+        if (!cellDate) return;
+        const [y, m, d] = cellDate.split("-");
+        const keys = [
+          `${y}-${m.replace(/^0/, "")}-${d.replace(/^0/, "")}`,
+          `${y}-${parseInt(m, 10)}-${parseInt(d, 10)}`,
+          `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`
+        ];
+        if (keys.some((k) => streakDays[k] === true)) {
+          cell.classList.add("solved");
+          appendCheckmark(cell);
         }
-      }
-      
-      // Mark days based on directly extracted streak days
-      if (Object.keys(streakDays).length > 0) {
-        calendarCells.forEach(function(cell) {
-          const cellDate = cell.getAttribute("data-date");
-          if (cellDate) {
-            const cellParts = cellDate.split('-');
-            const cellYear = cellParts[0];
-            const cellMonth = cellParts[1].replace(/^0/, ''); // Remove leading zero
-            const cellDay = cellParts[2].replace(/^0/, ''); // Remove leading zero
-            
-            // Check different formats of the day key
-            const keyFormats = [
-              `${cellYear}-${cellMonth}-${cellDay}`,
-              `${cellYear}-${parseInt(cellMonth)}-${parseInt(cellDay)}`,
-              `${cellYear}-${cellMonth.padStart(2, '0')}-${cellDay.padStart(2, '0')}`
-            ];
-            
-            // Check if any key format is found in streakDays
-            const isMarked = keyFormats.some(key => streakDays[key] === true);
-            
-            if (isMarked) {
-              cell.classList.add("solved");
-              
-              // Only add checkmark if it doesn't already have one
-              if (!cell.innerHTML.includes("✔")) {
-                // If the cell has a link, add checkmark after the link
-                if (cell.querySelector('a')) {
-                  cell.querySelector('a').insertAdjacentHTML('afterend', ' <span class="checkmark">✔</span>');
-                } else {
-                  cell.innerHTML += ' <span class="checkmark">✔</span>';
-                }
-              }
-              
-              console.log("Marked cell for", cellDate);
-            }
-          }
-        });
-        
-        return;
-      }
+      });
+      return;
     }
-    
-    // If we get here, we're using the dates from getDatesToMarkSolved
-    // Mark each cell that matches a date to mark
-    calendarCells.forEach(function(cell) {
+
+    cells.forEach((cell) => {
       const cellDate = cell.getAttribute("data-date");
-      
       if (cellDate && datesToMark.includes(cellDate)) {
         cell.classList.add("solved");
-        
-        // Only add checkmark if it doesn't already have one
-        if (!cell.innerHTML.includes("✔")) {
-          // If the cell has a link, add checkmark after the link
-          if (cell.querySelector('a')) {
-            cell.querySelector('a').insertAdjacentHTML('afterend', ' <span class="checkmark">✔</span>');
-          } else {
-            cell.innerHTML += ' <span class="checkmark">✔</span>';
-          }
-        }
-        
-        console.log("Marked cell for", cellDate);
+        appendCheckmark(cell);
       }
     });
   } catch (error) {
-    window.errorHandler.logError('markCalendarBasedOnStreak', error);
+    window.errorHandler.logError("markCalendarBasedOnStreak", error);
   }
 }
 
-// Update the streak UI in the calendar
 function updateStreakUI(streak) {
-  console.log("updateStreakUI: Updating streak UI to", streak);
   const streakElem = document.getElementById("calendar-streak");
-  if (streakElem) {
-    console.log("Found streak element, updating to:", streak);
-    streakElem.textContent = streak;
-  } else {
-    console.warn("updateStreakUI: Streak element not found.");
-  }
+  if (streakElem) streakElem.textContent = streak;
 }
 
-// Initialize on load
-console.log("[CF-POTD] Content script loaded");
+// ---------- bootstrap ----------
 
-// Check if we're on a Codeforces page
 if (window.location.href.includes("codeforces.com")) {
-  // Wait for page to fully load
   if (document.readyState === "complete") {
     initializeExtension();
   } else {
@@ -778,23 +490,10 @@ if (window.location.href.includes("codeforces.com")) {
   }
 }
 
-// Listen for messages from background script (for legacy support)
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  console.log("[CF-POTD] Message received:", request);
-  
-  if (request.action === "injectCalendarHTML") {
-    // Legacy: refresh calendar
-    if (window.refreshCalendar) {
-      window.refreshCalendar();
-    }
-    sendResponse({ success: true });
-  } else if (request.action === "openSettings") {
-    // Open settings panel from extension icon click
-    if (settingsPanelInstance) {
-      settingsPanelInstance.open();
-    }
+chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
+  if (request.action === "openSettings") {
+    if (settingsPanelInstance) settingsPanelInstance.open();
     sendResponse({ success: true });
   }
-  
-  return true; // Keep message channel open for async response
+  return true;
 });

@@ -1,70 +1,71 @@
 /**
- * Configuration Loader for Chrome Extension
- * 
- * IMPORTANT: This file loads configuration from config.json
- * Never commit config.json - it's gitignored and contains API endpoints
- * 
+ * Extension runtime configuration.
+ *
  * Setup:
- * 1. Copy config.example.json to config.json
- * 2. Edit config.json with your settings
- * 3. Set environment to "development" or "production"
+ *   1. Copy config.example.json to config.json (gitignored).
+ *   2. Set `environment` to "development" | "staging" | "production".
+ *   3. Fill in the URL for each environment you actually use.
+ *
+ * At load time we fetch config.json via chrome.runtime.getURL so the values
+ * live outside the codebase. If it fails we fall back to a localhost dev
+ * config (never to a real production URL).
  */
 
-// Default fallback configuration (if config.json fails to load)
-const DEFAULT_CONFIG = {
-  environment: 'development',
+const FALLBACK_CONFIG = {
+  environment: "development",
   api: {
-    development: {
-      url: 'http://localhost:4000'
-    },
-    production: {
-      url: 'https://your-production-api.com'
-    }
+    development: { url: "http://localhost:4000" },
+    staging: { url: "" },
+    production: { url: "" }
   },
   features: {
-    enableDebugLogs: true,
+    enableDebugLogs: false,
     enableAnimations: true,
     enableDarkMode: true
   }
 };
 
-// Load configuration from config.json
-let loadedConfig = DEFAULT_CONFIG;
+let loadedConfig = FALLBACK_CONFIG;
 
-// Try to load config.json (this works in Chrome extensions)
-fetch(chrome.runtime.getURL('config.json'))
-  .then(response => response.json())
-  .then(config => {
-    loadedConfig = config;
-    console.log(`[Config] Loaded ${config.environment} environment`);
+fetch(chrome.runtime.getURL("config.json"))
+  .then((r) => r.json())
+  .then((cfg) => {
+    loadedConfig = cfg;
+    console.log(`[cf-potd] config: ${cfg.environment}`);
   })
-  .catch(error => {
-    console.warn('[Config] Could not load config.json, using defaults. Please copy config.example.json to config.json');
-    console.warn('[Config] Error:', error.message);
+  .catch(() => {
+    console.warn("[cf-potd] config.json missing — using localhost dev fallback");
   });
 
-// Export configuration object
 window.config = {
   get current() {
-    const env = loadedConfig.environment || 'development';
+    const env = loadedConfig.environment || "development";
+    const apiEntry = loadedConfig.api[env] || {};
     return {
-      API_URL: loadedConfig.api[env].url,
+      API_URL: apiEntry.url,
       environment: env,
       features: loadedConfig.features
     };
   },
-  
-  // Helper to get current environment
-  isDevelopment() {
-    return loadedConfig.environment === 'development';
-  },
-  
-  isProduction() {
-    return loadedConfig.environment === 'production';
-  }
+  isDevelopment() { return (loadedConfig.environment || "development") === "development"; },
+  isProduction() { return loadedConfig.environment === "production"; }
 };
 
-// Standard storage keys
+/**
+ * Gated logger — chatter is silenced unless `features.enableDebugLogs` is
+ * true in config.json. `warn` and `error` are always emitted.
+ */
+window.log = {
+  debug(...args) {
+    if (loadedConfig.features?.enableDebugLogs) console.log(...args);
+  },
+  info(...args) {
+    if (loadedConfig.features?.enableDebugLogs) console.log(...args);
+  },
+  warn(...args) { console.warn(...args); },
+  error(...args) { console.error(...args); }
+};
+
 window.storageKeys = {
   USER_DATA: "userData",
   USER_INFO: "userInfo",
@@ -72,13 +73,11 @@ window.storageKeys = {
   LAST_SOLVED_DATE: "lastSolvedDate"
 };
 
-// Standardized error handling
 window.errorHandler = {
   logError(context, error) {
-    console.error(`[${context}] Error:`, error);
+    console.error(`[${context}]`, error);
     return error;
   },
-  
   displayError(message, element) {
     if (element) {
       element.textContent = message;
@@ -88,65 +87,36 @@ window.errorHandler = {
   }
 };
 
-// Update window.dateUtils to handle timezone properly using UTC
+/**
+ * Date helpers — all in UTC to avoid drift when users travel across
+ * timezones. "Today" is defined as the UTC calendar date.
+ */
 window.dateUtils = {
   getTodayISO() {
-    // Get current date in UTC
-    const now = new Date();
-    // Format to YYYY-MM-DD in UTC timezone
-    return this.formatDateToUTCISO(now);
+    return this.formatDateToUTCISO(new Date());
   },
-  
   getYesterdayISO() {
-    const yesterday = new Date();
-    yesterday.setUTCDate(yesterday.getUTCDate() - 1); // Use UTC date
-    return this.formatDateToUTCISO(yesterday);
+    const y = new Date();
+    y.setUTCDate(y.getUTCDate() - 1);
+    return this.formatDateToUTCISO(y);
   },
-  
-  // Helper to format a date to ISO string in UTC timezone (YYYY-MM-DD)
   formatDateToUTCISO(date) {
-    const year = date.getUTCFullYear();
-    // Add 1 to month since getMonth() is 0-indexed
-    const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
-    const day = date.getUTCDate().toString().padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    const y = date.getUTCFullYear();
+    const m = (date.getUTCMonth() + 1).toString().padStart(2, "0");
+    const d = date.getUTCDate().toString().padStart(2, "0");
+    return `${y}-${m}-${d}`;
   },
-  
-  // Keep original local timezone method for legacy code that might need it
   formatDateToISO(date) {
-    const year = date.getFullYear();
-    // Add 1 to month since getMonth() is 0-indexed
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const day = date.getDate().toString().padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    const y = date.getFullYear();
+    const m = (date.getMonth() + 1).toString().padStart(2, "0");
+    const d = date.getDate().toString().padStart(2, "0");
+    return `${y}-${m}-${d}`;
   },
-  
   getCurrentMonthAndYear() {
-    // Use UTC for consistency across timezones
     const today = new Date();
     return {
-      month: today.getUTCMonth() + 1, // 1-indexed month
+      month: today.getUTCMonth() + 1,
       year: today.getUTCFullYear()
     };
-  },
-  
-  // Move the debug function into dateUtils to avoid global scope pollution
-  logDateDebugInfo() {
-    const now = new Date();
-    const localDate = now.toLocaleDateString();
-    const isoDate = now.toISOString();
-    const utcDate = now.toUTCString();
-    const todayISOFromUtils = this.getTodayISO();
-    const yesterdayISO = this.getYesterdayISO();
-    
-    console.log("===== DATE DEBUG INFO =====");
-    console.log("Local Date:", localDate);
-    console.log("ISO Date:", isoDate);
-    console.log("UTC Date:", utcDate);
-    console.log("Today ISO (UTC method):", todayISOFromUtils);
-    console.log("Yesterday ISO (UTC method):", yesterdayISO);
-    console.log("============================");
-    
-    return todayISOFromUtils;
   }
 };

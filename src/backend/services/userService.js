@@ -1,428 +1,194 @@
 const mongoose = require("mongoose");
 const Models = require("../models/models");
-const User = new mongoose.model("User", Models.userSchema);
+
+const User = mongoose.model("User", Models.userSchema);
+
+const CF_USER_API = "https://codeforces.com/api/user.info?handles=";
+const UNRATED_DEFAULT = 800;
 
 /**
- * Find user by ID
- * @param {string} userID - The user ID to search for
- * @returns {Promise} - Promise resolving to user object or null
+ * Fetch a user from the Codeforces API. Returns the canonical handle and
+ * current rating (defaults to UNRATED_DEFAULT for unrated users).
+ * Throws a 400-tagged error if the handle is invalid.
  */
-const findUserByID = async (userID) => {
-    try {
-        const user = await User.find({ userID: userID });
-        return user;
-    } catch (error) {
-        throw error;
-    }
+const fetchFromCodeforces = async (handle) => {
+  const response = await fetch(`${CF_USER_API}${handle}`);
+  const data = await response.json();
+
+  if (data.status !== "OK") {
+    const err = new Error(data.comment || "Invalid Codeforces handle");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const cf = data.result[0];
+  return {
+    handle: cf.handle,
+    rating: cf.rating || UNRATED_DEFAULT
+  };
 };
 
-/**
- * Create a new user
- * @param {string} userID - The Codeforces user handle
- * @returns {Promise} - Promise resolving to newly created user
- */
-const createUser = async (userID) => {
-    try {
-        // Check if user already exists
-        const existingUser = await User.find({ userID: userID });
-        if (existingUser.length !== 0) {
-            throw new Error("User already exists");
-        }
-
-        // Fetch user data from Codeforces API
-        const CF_User_API_URL = `https://codeforces.com/api/user.info?handles=${userID}`;
-        const response = await fetch(CF_User_API_URL);
-        const data = await response.json();
-        
-        if (data.status !== "OK") {
-            throw new Error("Failed to fetch user data from Codeforces API");
-        }
-        
-        const user = data.result[0];
-        const userHandle = user.handle;
-        const userRating = user.rating;
-
-        // Create streak_days with all days of the current month set to false
-        const streak_days = {};
-        const today = new Date();
-        const year = today.getFullYear();
-        const month = today.getMonth() + 1; // 1-indexed month
-        const daysInMonth = new Date(year, month, 0).getDate();
-        
-        // Populate all days in the current month
-        for (let day = 1; day <= daysInMonth; day++) {
-            const dayKey = `${year}-${month}-${day}`;
-            streak_days[dayKey] = false;
-        }
-
-        // Create new user
-        const newUser = new User({
-            userID: userHandle,
-            rating: userRating,
-            streak: {
-                last_streak_date: null,
-                last_streak_count: 0,
-                streak_days: streak_days
-            },
-        });
-
-        // Save the user to database
-        return await newUser.save();
-    } catch (error) {
-        throw error;
-    }
+/** Build an empty streak_days map for the current month. */
+const buildInitialStreakDays = () => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth() + 1;
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const streakDays = {};
+  for (let day = 1; day <= daysInMonth; day++) {
+    streakDays[`${year}-${month}-${day}`] = false;
+  }
+  return streakDays;
 };
 
-/**
- * Update a specific day's streak status
- * @param {string} userID - The user ID
- * @param {number} day - The day of the month
- * @param {boolean} solved - Whether the day is solved
- * @returns {Promise} - Promise resolving to updated user
- */
-const updateUserStreakDay = async (userID, day, solved = true) => {
-    try {
-        const date = new Date();
-        const monthDay = day || date.getDate();
-        const monthKey = `${date.getFullYear()}-${date.getMonth() + 1}`;
-        const dayKey = `${monthKey}-${monthDay}`;
-        
-        // Use dot notation for the update to set a specific day in the Map
-        const updateQuery = {};
-        updateQuery[`streak.streak_days.${dayKey}`] = solved;
-        
-        const updatedUser = await User.findOneAndUpdate(
-            { userID: userID },
-            { $set: updateQuery },
-            { new: true }
-        );
-        
-        if(updatedUser === null) {
-            throw new Error("User not found");
-        }
-        
-        return updatedUser;
-    } catch (error) {
-        throw error;
-    }
-};
+const findUserByID = (userID) => User.find({ userID });
 
 /**
- * Reset all streak days for the current month
- * @param {string} userID - The user ID
- * @returns {Promise} - Promise resolving to updated user
- */
-const resetUserStreakDays = async (userID) => {
-    try {
-        const date = new Date();
-        const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-        const monthKey = `${date.getFullYear()}-${date.getMonth() + 1}`;
-        
-        // Create an update query to clear all days
-        const updateQuery = {};
-        for (let i = 1; i <= daysInMonth; i++) {
-            const dayKey = `${monthKey}-${i}`;
-            updateQuery[`streak.streak_days.${dayKey}`] = false;
-        }
-        
-        const updatedUser = await User.findOneAndUpdate(
-            { userID: userID },
-            { $set: updateQuery },
-            { new: true }
-        );
-        
-        if(updatedUser === null) {
-            throw new Error("User not found");
-        }
-        
-        return updatedUser;
-    } catch (error) {
-        throw error;
-    }
-};
-
-/**
- * Update user streak
- * @param {string} userID - The user ID
- * @param {number} lastStreakCount - The current streak count
- * @param {boolean} updateDate - Whether to update the last_streak_date (default: false)
- * @returns {Promise} - Promise resolving to updated user
- */
-const updateUserStreak = async (userID, lastStreakCount, updateDate = false) => {
-    try {
-        const streak_count = parseInt(lastStreakCount);
-        
-        // Get existing user to decide what to update
-        const existingUser = await User.findOne({ userID: userID });
-        if (!existingUser) {
-            throw new Error("User not found");
-        }
-        
-        // Determine what fields to update
-        const updateFields = {};
-        
-        // Always update streak count
-        updateFields["streak.last_streak_count"] = streak_count;
-        
-        // Only update the date if explicitly requested or if streak > 0 is being set
-        if (updateDate || (streak_count > 0 && existingUser.streak.last_streak_count != streak_count)) {
-            updateFields["streak.last_streak_date"] = new Date();
-        }
-        
-        // Is this a streak reset to 0?
-        const isReset = streak_count === 0;
-        
-        // For continuing streak or if we're validating a new solve, mark today as solved
-        if (!isReset || updateDate) {
-            // Mark today as solved
-            const today = new Date();
-            const year = today.getFullYear();
-            const month = today.getMonth() + 1;
-            const day = today.getDate();
-            const dayKey = `${year}-${month}-${day}`;
-            
-            updateFields[`streak.streak_days.${dayKey}`] = true;
-        }
-        
-        // Update the user with all field changes - DON'T RESET STREAK DAYS
-        const updatedUser = await User.findOneAndUpdate(
-            { userID: userID },
-            { $set: updateFields },
-            { new: true }
-        );
-        
-        if(updatedUser === null) {
-            throw new Error("User not found");
-        }
-        
-        return updatedUser;
-    } catch (error) {
-        throw error;
-    }
-};
-
-/**
- * Clean up old streak days (older than 3 months)
- * @param {string} userID - The user ID
- * @returns {Promise} - Promise resolving to updated user
- */
-const cleanupOldStreakDays = async (userID) => {
-    try {
-        // Get the user to access their streak days
-        const user = await User.findOne({ userID: userID });
-        if (!user || !user.streak || !user.streak.streak_days) {
-            throw new Error("User or streak days not found");
-        }
-        
-        // Calculate the date 3 months ago
-        const threeMonthsAgo = new Date();
-        threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-        
-        // Helper to convert streak day key to date
-        const dateFromKey = (key) => {
-            const [year, month, day] = key.split('-').map(num => parseInt(num));
-            return new Date(year, month - 1, day); // month is 0-indexed in Date
-        };
-        
-        const streakDays = user.streak.streak_days;
-        const updateFields = {};
-        let removedCount = 0;
-        
-        // Find and remove old days
-        for (const dayKey in streakDays) {
-            const date = dateFromKey(dayKey);
-            if (date < threeMonthsAgo) {
-                updateFields[`streak.streak_days.${dayKey}`] = undefined; // MongoDB $unset equivalent
-                removedCount++;
-            }
-        }
-        
-        // Only update if there are days to remove
-        if (removedCount > 0) {
-            console.log(`Cleaning up ${removedCount} old streak days for user ${userID}`);
-            
-            // Update the user to remove old days
-            const updatedUser = await User.findOneAndUpdate(
-                { userID: userID },
-                { $unset: updateFields },
-                { new: true }
-            );
-            
-            return updatedUser;
-        }
-        
-        return user; // No changes needed
-    } catch (error) {
-        console.error("Error cleaning up old streak days:", error);
-        throw error;
-    }
-};
-
-/**
- * Get or create a user, always syncing rating with Codeforces API.
+ * Single source of truth for user login / signup.
  *
- * Codeforces is treated as the source of truth. If the user exists in our DB
- * but their rating differs from the Codeforces API, the DB rating is updated.
- *
- * This is the single entry point for the `POST /users` endpoint and replaces
- * the previous behavior where existing users were returned with stale ratings.
- *
- * @param {string} userID - The Codeforces user handle (case-insensitive)
- * @returns {Promise<Object>} - Promise resolving to the user document
- * @throws {Error} - If Codeforces API fails or handle is invalid
+ * Always fetches the latest user info from Codeforces and reconciles it with
+ * our DB. If the rating has drifted, we update it. New users are created with
+ * canonical CF casing and a fresh streak_days map.
  */
 const getOrCreateUser = async (userID) => {
-    // 1. Fetch from Codeforces API (source of truth)
-    const CF_User_API_URL = `https://codeforces.com/api/user.info?handles=${userID}`;
-    const response = await fetch(CF_User_API_URL);
-    const data = await response.json();
+  const { handle, rating } = await fetchFromCodeforces(userID);
 
-    if (data.status !== "OK") {
-        const err = new Error(data.comment || "Invalid Codeforces handle");
-        err.statusCode = 400;
-        throw err;
+  const existing = await User.findOne({
+    userID: { $regex: `^${handle}$`, $options: "i" }
+  });
+
+  if (existing) {
+    if (existing.rating !== rating) {
+      console.log(`[user] rating sync ${handle}: ${existing.rating} -> ${rating}`);
+      existing.rating = rating;
+      await existing.save();
     }
+    return existing;
+  }
 
-    const cfUser = data.result[0];
-    const cfHandle = cfUser.handle; // canonical casing from CF
-    const cfRating = cfUser.rating || 800; // unrated users default to 800
-
-    // 2. Look up existing user (case-insensitive match on CF canonical handle)
-    const existingUser = await User.findOne({
-        userID: { $regex: `^${cfHandle}$`, $options: "i" }
-    });
-
-    if (existingUser) {
-        // 3a. Exists — sync rating if it drifted
-        if (existingUser.rating !== cfRating) {
-            console.log(
-                `[getOrCreateUser] Syncing rating for ${cfHandle}: ${existingUser.rating} -> ${cfRating}`
-            );
-            existingUser.rating = cfRating;
-            await existingUser.save();
-        } else {
-            console.log(
-                `[getOrCreateUser] User ${cfHandle} rating unchanged: ${cfRating}`
-            );
-        }
-        return existingUser;
+  console.log(`[user] creating ${handle} (rating: ${rating})`);
+  return new User({
+    userID: handle,
+    rating,
+    streak: {
+      last_streak_date: null,
+      last_streak_count: 0,
+      streak_days: buildInitialStreakDays()
     }
+  }).save();
+};
 
-    // 3b. Doesn't exist — create with fresh CF data
-    console.log(
-        `[getOrCreateUser] Creating new user: ${cfHandle} (rating: ${cfRating})`
-    );
+/**
+ * Manual "refresh rating" endpoint now piggy-backs on getOrCreateUser so the
+ * Codeforces-sync logic lives in exactly one place.
+ */
+const refreshUserRating = (userID) => getOrCreateUser(userID);
 
-    const streak_days = {};
+const updateUserStreakDay = async (userID, day, solved = true) => {
+  const date = new Date();
+  const monthDay = day || date.getDate();
+  const dayKey = `${date.getFullYear()}-${date.getMonth() + 1}-${monthDay}`;
+
+  const updated = await User.findOneAndUpdate(
+    { userID },
+    { $set: { [`streak.streak_days.${dayKey}`]: solved } },
+    { new: true }
+  );
+  if (!updated) throw new Error("User not found");
+  return updated;
+};
+
+const resetUserStreakDays = async (userID) => {
+  const date = new Date();
+  const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  const monthKey = `${date.getFullYear()}-${date.getMonth() + 1}`;
+
+  const updateQuery = {};
+  for (let i = 1; i <= daysInMonth; i++) {
+    updateQuery[`streak.streak_days.${monthKey}-${i}`] = false;
+  }
+
+  const updated = await User.findOneAndUpdate(
+    { userID },
+    { $set: updateQuery },
+    { new: true }
+  );
+  if (!updated) throw new Error("User not found");
+  return updated;
+};
+
+const updateUserStreak = async (userID, lastStreakCount, updateDate = false) => {
+  const streakCount = parseInt(lastStreakCount, 10);
+
+  const existing = await User.findOne({ userID });
+  if (!existing) throw new Error("User not found");
+
+  const updateFields = { "streak.last_streak_count": streakCount };
+
+  if (
+    updateDate ||
+    (streakCount > 0 && existing.streak.last_streak_count !== streakCount)
+  ) {
+    updateFields["streak.last_streak_date"] = new Date();
+  }
+
+  // For a continuing streak (or a new validated solve) mark today solved.
+  const isReset = streakCount === 0;
+  if (!isReset || updateDate) {
     const today = new Date();
-    const year = today.getFullYear();
-    const month = today.getMonth() + 1;
-    const daysInMonth = new Date(year, month, 0).getDate();
-    for (let day = 1; day <= daysInMonth; day++) {
-        streak_days[`${year}-${month}-${day}`] = false;
-    }
+    const dayKey = `${today.getFullYear()}-${today.getMonth() + 1}-${today.getDate()}`;
+    updateFields[`streak.streak_days.${dayKey}`] = true;
+  }
 
-    const newUser = new User({
-        userID: cfHandle,
-        rating: cfRating,
-        streak: {
-            last_streak_date: null,
-            last_streak_count: 0,
-            streak_days: streak_days
-        }
-    });
-
-    return await newUser.save();
+  const updated = await User.findOneAndUpdate(
+    { userID },
+    { $set: updateFields },
+    { new: true }
+  );
+  if (!updated) throw new Error("User not found");
+  return updated;
 };
 
-/**
- * Refresh user rating from Codeforces API
- * @param {string} userID - The user ID
- * @returns {Promise} - Promise resolving to updated user
- */
-const refreshUserRating = async (userID) => {
-    try {
-        // Fetch user data from Codeforces API
-        const CF_User_API_URL = `https://codeforces.com/api/user.info?handles=${userID}`;
-        const response = await fetch(CF_User_API_URL);
-        const data = await response.json();
-        
-        if (data.status !== "OK") {
-            throw new Error("Failed to fetch user data from Codeforces API");
-        }
-        
-        const user = data.result[0];
-        const userRating = user.rating || 800; // Default to 800 if no rating
-        
-        // Update user rating in database
-        const updatedUser = await User.findOneAndUpdate(
-            { userID: userID },
-            { $set: { rating: userRating } },
-            { new: true }
-        );
-        
-        if(updatedUser === null) {
-            throw new Error("User not found");
-        }
-        
-        console.log(`Rating refreshed for ${userID}: ${userRating}`);
-        return updatedUser;
-    } catch (error) {
-        console.error("Error refreshing user rating:", error);
-        throw error;
+/** Drop streak_days entries older than 3 months to keep the doc compact. */
+const cleanupOldStreakDays = async (userID) => {
+  const user = await User.findOne({ userID });
+  if (!user || !user.streak || !user.streak.streak_days) {
+    throw new Error("User or streak days not found");
+  }
+
+  const threshold = new Date();
+  threshold.setMonth(threshold.getMonth() - 3);
+
+  const keyToDate = (key) => {
+    const [y, m, d] = key.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  };
+
+  const unset = {};
+  let removed = 0;
+  for (const key of Object.keys(user.streak.streak_days.toObject?.() ?? user.streak.streak_days)) {
+    if (keyToDate(key) < threshold) {
+      unset[`streak.streak_days.${key}`] = "";
+      removed++;
     }
-};
+  }
 
-/**
- * Update user based on the attribute sent in the request body
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- * @returns {Promise<void>}
- */
-const updateUser = async (req, res) => {
-    try {
-        const userID = req.body.userID;
-        const update = req.body.update;
+  if (removed === 0) return user;
 
-        if (!userID) {
-            return res.status(400).json("UserID is required");
-        }
-
-        if (!update) {
-            return res.status(400).json("Update is required");
-        }
-
-        const updatedUser = await User.findOneAndUpdate(
-            { userID: userID },
-            { 
-                $set: update
-            },
-            { new: true }
-        );
-
-        if(updatedUser === null) {
-            return res.status(404).json("User not found");
-        }
-
-        res.status(200).json({
-            "message": "User updated successfully",
-            "user": updatedUser
-        });
-    } catch (err) {
-        console.error("Error in updateUser:", err);
-        res.status(500).json({
-            "message": err.message || "Internal server error"
-        });
-    }
+  console.log(`[user] cleaned ${removed} old streak days for ${userID}`);
+  return User.findOneAndUpdate(
+    { userID },
+    { $unset: unset },
+    { new: true }
+  );
 };
 
 module.exports = {
-    findUserByID,
-    createUser,
-    getOrCreateUser,
-    updateUserStreak,
-    updateUserStreakDay,
-    resetUserStreakDays,
-    cleanupOldStreakDays,
-    refreshUserRating
+  findUserByID,
+  getOrCreateUser,
+  refreshUserRating,
+  updateUserStreak,
+  updateUserStreakDay,
+  resetUserStreakDays,
+  cleanupOldStreakDays
 };
