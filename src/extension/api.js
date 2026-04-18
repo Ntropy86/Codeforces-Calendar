@@ -1,190 +1,134 @@
 /**
- * Backend API client for the extension.
+ * Backend API client for the extension (V3 contract).
  *
- * Uses `window.config.current.API_URL` resolved from config.json at load
- * time, and retries transient failures (up to 3 attempts with a fixed
- * back-off) before surfacing the error to the caller.
+ * Every backend call returns a flat, predictable shape — no more deep-array
+ * unwrapping. Transient network failures are retried up to 3 times with a
+ * fixed back-off before surfacing to the caller.
+ *
+ * `verifySubmission` hits the Codeforces API directly (CORS-open) because
+ * the backend doesn't need to be in that loop — rationale in
+ * services/submissionService.js.
  */
 
 const DEFAULT_MAX_RETRIES = 3;
-const DEFAULT_RETRY_DELAY_MS = 2000;
+const DEFAULT_RETRY_DELAY_MS = 1500;
 
-/**
- * Extract the user document from a backend response. Tolerates both the
- * `{ message: { ... } }` and `{ user: { ... } }` shapes some legacy
- * endpoints still return.
- */
-function extractUser(response) {
-  if (response?.message && typeof response.message === "object") {
-    return Array.isArray(response.message) ? response.message[0] : response.message;
+async function fetchWithRetry(url, options = {}, {
+  maxRetries = DEFAULT_MAX_RETRIES,
+  delayMs = DEFAULT_RETRY_DELAY_MS
+} = {}) {
+  let lastError;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      window.log.debug(`[api] ${options.method || "GET"} ${url} (try ${attempt})`);
+      const res = await fetch(url, options);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        const err = new Error(body.error || `HTTP ${res.status}`);
+        err.statusCode = res.status;
+        // Don't retry 4xx — they won't succeed on retry.
+        if (res.status >= 400 && res.status < 500) throw err;
+        throw err;
+      }
+      return await res.json();
+    } catch (err) {
+      lastError = err;
+      const isClientErr = err.statusCode >= 400 && err.statusCode < 500;
+      if (isClientErr || attempt === maxRetries) break;
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
   }
-  if (response?.user) return response.user;
-  return null;
+  throw lastError;
+}
+
+function base() {
+  const url = window.config.current.API_URL;
+  if (!url) throw new Error("API_URL not configured — check config.json");
+  return url;
 }
 
 window.api = {
-  async fetchWithRetry(url, options, maxRetries = DEFAULT_MAX_RETRIES, delay = DEFAULT_RETRY_DELAY_MS) {
-    let lastError;
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        window.log.debug(`[api] ${options?.method || "GET"} ${url} (attempt ${attempt + 1})`);
-        const response = await fetch(url, options);
-        if (!response.ok) {
-          const errorBody = await response.json().catch(() => null);
-          throw new Error(
-            `HTTP ${response.status}: ${errorBody ? JSON.stringify(errorBody) : response.statusText}`
-          );
-        }
-        return await response.json();
-      } catch (error) {
-        console.warn(`[api] attempt ${attempt + 1} failed:`, error.message);
-        lastError = error;
-        if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, delay));
-        }
-      }
-    }
-    throw lastError;
-  },
-
   /**
-   * POST /users — single entry point for login/signup. Always returns the
-   * synced user record (Codeforces rating fetched server-side).
+   * POST /users — upsert + Codeforces rating sync in one call.
+   * Returns { user, today: { dateISO, problem, streak } }.
    */
   async getOrCreateUser(handle) {
-    try {
-      const response = await this.fetchWithRetry(
-        `${window.config.current.API_URL}/users`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userID: handle })
-        }
-      );
-      const user = extractUser(response);
-      if (!user) throw new Error("Failed to extract user data from response");
-      return user;
-    } catch (error) {
-      window.errorHandler.logError("getOrCreateUser", error);
-      throw error;
-    }
+    return fetchWithRetry(`${base()}/users`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userID: handle })
+    });
   },
 
-  async updateUserStreak(handle, streakCount, updateDate = false) {
-    try {
-      const response = await this.fetchWithRetry(
-        `${window.config.current.API_URL}/users`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userID: handle,
-            last_streak_count: streakCount,
-            updateDate
-          })
-        }
-      );
-      const user = extractUser(response);
-      if (!user) throw new Error("Failed to extract updated user data");
-      return user;
-    } catch (error) {
-      window.errorHandler.logError("updateUserStreak", error);
-      throw error;
-    }
+  /** GET /users/:userID — same shape as POST, no CF re-sync. */
+  async getUser(handle) {
+    return fetchWithRetry(`${base()}/users/${encodeURIComponent(handle)}`);
   },
 
-  async cleanupOldStreakDays(handle) {
-    try {
-      const response = await this.fetchWithRetry(
-        `${window.config.current.API_URL}/users/cleanup-streak-days`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userID: handle })
-        }
-      );
-      const user = extractUser(response);
-      if (!user) throw new Error("Failed to extract updated user data");
-      return user;
-    } catch (error) {
-      window.errorHandler.logError("cleanupOldStreakDays", error);
-      throw error;
-    }
+  /** POST /users/:userID/refresh-rating — force CF re-sync. */
+  async refreshRating(handle) {
+    return fetchWithRetry(`${base()}/users/${encodeURIComponent(handle)}/refresh-rating`, {
+      method: "POST"
+    });
+  },
+
+  /** GET /problems/daily?rating=X&date=YYYY-MM-DD. */
+  async getDailyProblem(rating, dateISO) {
+    const qs = new URLSearchParams({ rating });
+    if (dateISO) qs.set("date", dateISO);
+    return fetchWithRetry(`${base()}/problems/daily?${qs}`);
+  },
+
+  /** GET /problems?rating=X&from=YYYY-MM-DD&to=YYYY-MM-DD. */
+  async getProblemsInRange(rating, fromISO, toISO) {
+    const qs = new URLSearchParams({ rating, from: fromISO, to: toISO });
+    return fetchWithRetry(`${base()}/problems?${qs}`);
+  },
+
+  /** POST /submissions — idempotent. Returns { submission, streak }. */
+  async recordSubmission(handle, problemCfId, dateISO) {
+    return fetchWithRetry(`${base()}/submissions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userID: handle, problemCfId, dateISO })
+    });
   },
 
   /**
-   * GET /problemset/monthly
-   *
-   * Ratings are stored in 100-point buckets offset by +200 from the user's
-   * current rating (so a 1204 user gets 1400-rated problems — a bit of a
-   * stretch target). This rounding lives here until the "standardize-data"
-   * sprint moves it to the backend.
+   * GET /submissions?userID=X&from=...&to=... — returns `items` and a
+   * pre-built `solvedDays` map keyed by dateISO.
    */
-  async getMonthlyProblems(month, year, rating) {
-    try {
-      const bucketRating = Math.ceil(rating / 100) * 100 + 200;
-      const url = `${window.config.current.API_URL}/problemset/monthly?month=${month}&year=${year}&rating=${bucketRating}`;
-
-      const response = await this.fetchWithRetry(url, { method: "GET" });
-      if (response.data) return response.data;
-      throw new Error(`Failed to get monthly problems: ${JSON.stringify(response)}`);
-    } catch (error) {
-      window.errorHandler.logError("getMonthlyProblems", error);
-      throw error;
-    }
+  async getSubmissions(handle, fromISO, toISO) {
+    const qs = new URLSearchParams({ userID: handle, from: fromISO, to: toISO });
+    return fetchWithRetry(`${base()}/submissions?${qs}`);
   },
 
   /**
-   * Verify the user has an AC submission for today's problem.
+   * Query Codeforces directly to check whether the handle has an AC for
+   * a given problem. Returns { verified: boolean, submission? }.
    *
-   * Queries Codeforces directly from the content script (their API is CORS-open).
-   * The backend /test/submissions route exists for local dev with mocked data
-   * and is never reachable in production — this client always hits CF live.
+   * We scan the user's most recent 30 submissions, which comfortably covers
+   * a day's worth of activity for any realistic user.
    */
-  async verifySubmission(handle, problem) {
+  async verifySubmission(handle, problemCfId) {
+    if (!handle || !problemCfId) return { verified: false, reason: "missing args" };
     try {
-      const url = `https://codeforces.com/api/user.status?handle=${handle}&from=1&count=10`;
-      const response = await this.fetchWithRetry(url, { method: "GET" });
-
-      if (response.status !== "OK") {
-        throw new Error(`Codeforces API error: ${response.comment || "Unknown error"}`);
+      const url = `https://codeforces.com/api/user.status?handle=${encodeURIComponent(handle)}&from=1&count=30`;
+      const res = await fetch(url);
+      const body = await res.json();
+      if (body.status !== "OK") {
+        return { verified: false, reason: body.comment || "CF API error" };
       }
-      if (!Array.isArray(response.result)) {
-        return { verified: false, message: "No submissions returned" };
-      }
-
-      for (const submission of response.result) {
-        const match = problem
-          && submission.problem.contestId === problem.problem.contestId
-          && submission.problem.index === problem.problem.index;
-        if (match && submission.verdict === "OK") {
-          console.log(`[api] verified AC for ${submission.problem.contestId}${submission.problem.index}`);
-          return { verified: true, submission };
+      for (const s of body.result || []) {
+        const cfId = `${s.problem.contestId}${s.problem.index}`;
+        if (cfId === problemCfId && s.verdict === "OK") {
+          return { verified: true, submission: s };
         }
       }
-      return { verified: false, message: "No accepted submission found for today's problem" };
-    } catch (error) {
-      window.errorHandler.logError("verifySubmission", error);
-      return { verified: false, error: error.message };
-    }
-  },
-
-  async updateLastStreakDate(handle, dateString) {
-    try {
-      const response = await this.fetchWithRetry(
-        `${window.config.current.API_URL}/users/streak-date`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userID: handle, last_streak_date: dateString })
-        }
-      );
-      const user = extractUser(response);
-      if (!user) throw new Error("Failed to extract updated user data");
-      return user;
-    } catch (error) {
-      window.errorHandler.logError("updateLastStreakDate", error);
-      throw error;
+      return { verified: false, reason: "no matching AC found" };
+    } catch (err) {
+      window.log.warn("[api] verifySubmission failed:", err.message);
+      return { verified: false, reason: err.message };
     }
   }
 };

@@ -15,10 +15,16 @@ const { toISODate } = require("../lib/dates");
 async function recordSubmission({ userID, problemCfId, dateISO, verdict = "OK", source = "live" }) {
   const date = dateISO || toISODate(new Date());
 
-  const existing = await Submission.findOne({ userID, dateISO: date, problemCfId });
-  if (existing) return existing;
-
-  return Submission.create({ userID, dateISO: date, problemCfId, verdict, source });
+  try {
+    return await Submission.create({ userID, dateISO: date, problemCfId, verdict, source });
+  } catch (err) {
+    // Duplicate key = concurrent request or retry for the same solve.
+    // Treat as success by returning the already-persisted doc.
+    if (err.code === 11000) {
+      return Submission.findOne({ userID, dateISO: date, problemCfId });
+    }
+    throw err;
+  }
 }
 
 /**
@@ -33,7 +39,14 @@ async function listSubmissions(userID, fromISO, toISO) {
     if (fromISO) query.dateISO.$gte = fromISO;
     if (toISO) query.dateISO.$lte = toISO;
   }
-  return Submission.find(query, { _id: 0, userID: 1, dateISO: 1, problemCfId: 1, verdict: 1, source: 1 })
+  return Submission.find(query, {
+    _id: 0,
+    userID: 1,
+    dateISO: 1,
+    problemCfId: 1,
+    verdict: 1,
+    source: 1
+  })
     .sort({ dateISO: 1 })
     .lean();
 }

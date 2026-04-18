@@ -66,9 +66,7 @@ async function refreshGlobalProblems() {
   }
   if (ratingUpdates.length) {
     await Promise.all(
-      ratingUpdates.map(({ cfId, rating }) =>
-        Problem.updateOne({ cfId }, { $set: { rating } })
-      )
+      ratingUpdates.map(({ cfId, rating }) => Problem.updateOne({ cfId }, { $set: { rating } }))
     );
     stats.ratingPatched = ratingUpdates.length;
   }

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Codeforces POTD",
   "description": "This Extension Gives you a New CF problem to solve each day according to your rating and challenges you. Got what it takes?",
-  "version": "2.0.0",
+  "version": "2.5.0",
   "permissions": [
     "storage",
     "tabs"

@@ -82,7 +82,10 @@ async function main() {
   }
 
   // ---- users + submissions ----
-  const legacyUsers = await db.collection("users").find({ "streak.streak_days": { $exists: true } }).toArray();
+  const legacyUsers = await db
+    .collection("users")
+    .find({ "streak.streak_days": { $exists: true } })
+    .toArray();
   console.log(`[migrate] legacy users with streak_days: ${legacyUsers.length}`);
 
   if (APPLY) {

@@ -1,15 +1,18 @@
 {
   "name": "codeforces-calendar",
-  "version": "2.0.0",
-  "description": "DB Added into the mix",
+  "version": "2.5.0",
+  "description": "Codeforces POTD backend — deterministic daily problem + streak service.",
   "main": "index.js",
   "scripts": {
     "dev": "nodemon index.js",
     "start": "node index.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "jest --runInBand",
     "test:watch": "jest --watch",
-    "lint": "echo \"Linting not configured yet\"",
-    "format": "echo \"Formatting not configured yet\""
+    "test:coverage": "jest --coverage --runInBand",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "repository": {
     "type": "git",
@@ -40,6 +43,14 @@
     "node-cron": "^3.0.3"
   },
   "devDependencies": {
-    "nodemon": "^3.1.9"
+    "@eslint/js": "10.0.1",
+    "eslint": "10.2.1",
+    "eslint-config-prettier": "10.1.8",
+    "globals": "17.5.0",
+    "jest": "30.3.0",
+    "mongodb-memory-server": "11.0.1",
+    "nodemon": "^3.1.9",
+    "prettier": "3.8.3",
+    "supertest": "7.2.2"
   }
 }

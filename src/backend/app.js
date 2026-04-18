@@ -7,11 +7,13 @@ const cors = require("cors");
 const app = express();
 
 const corsOrigin = process.env.CORS_ORIGIN || "*";
-app.use(cors({
-  origin: corsOrigin,
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization"]
-}));
+app.use(
+  cors({
+    origin: corsOrigin,
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"]
+  })
+);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

@@ -1,32 +1,47 @@
 /**
- * Settings modal. Opened from the calendar header gear icon or the
- * extension's browser-action button. Exposes user info, manual refresh
- * actions, and user-facing preferences.
+ * Settings modal (V3).
  *
- * Dark mode / notifications toggles currently just flip CSS classes — full
- * implementation is scheduled for the UX sprint.
+ * Reads the flat `user` + `today` + `monthView` caches from storage.
+ * Actions that mutate state always fire the backend call first, update
+ * storage with the authoritative response, then nudge the calendar.
+ *
+ * Dark-mode and animation toggles flip CSS classes; full theming lives
+ * in the style sheet.
  */
-
-function unwrapUserFromStorage(userInfo) {
-  if (!userInfo) return null;
-  if (Array.isArray(userInfo) && userInfo.length > 0) {
-    return Array.isArray(userInfo[0]) ? userInfo[0][0] : userInfo[0];
-  }
-  return typeof userInfo === "object" ? userInfo : null;
-}
 
 /**
- * Small helper to drive a transient button state (loading → result → reset).
- * `work` resolves with the label to show on success.
+ * Theme helpers.
+ *
+ * Resolution order (matches the CSS cascade):
+ *   1. user has explicitly forced light → `cf-potd-light-mode` on <html>
+ *   2. user has explicitly forced dark  → `cf-potd-dark-mode` on <html>
+ *   3. otherwise follow the system preference (CSS handles this via media)
+ *
+ * When the user checks the Dark-mode toggle we apply an explicit override.
+ * Unchecking reverts to system-follows-auto. The preference is persisted.
  */
-async function runButtonWorkflow(btn, originalText, loadingText, work, resetMs = 2000) {
+function isDarkActive() {
+  const html = document.documentElement;
+  if (html.classList.contains("cf-potd-dark-mode")) return true;
+  if (html.classList.contains("cf-potd-light-mode")) return false;
+  // No explicit override: fall back to whatever Codeforces itself is showing.
+  return window.detectCodeforcesTheme?.() === "dark";
+}
+
+function applyDarkPreference(wantDark) {
+  const html = document.documentElement;
+  html.classList.toggle("cf-potd-dark-mode", wantDark);
+  html.classList.toggle("cf-potd-light-mode", !wantDark);
+  window.storage.set("themeOverride", wantDark ? "dark" : "light").catch(() => {});
+}
+
+async function runButton(btn, originalText, loadingText, work, resetMs = 2000) {
   try {
     btn.textContent = loadingText;
     btn.disabled = true;
-    const resultText = await work();
-    btn.textContent = resultText;
+    btn.textContent = await work();
   } catch (err) {
-    btn.textContent = "❌ Failed";
+    btn.textContent = "Failed";
     throw err;
   } finally {
     setTimeout(() => {
@@ -37,8 +52,8 @@ async function runButtonWorkflow(btn, originalText, loadingText, work, resetMs =
 }
 
 class SettingsPanel {
-  constructor(userData) {
-    this.userData = userData;
+  constructor(user) {
+    this.user = user || null;
     this.container = null;
     this.isOpen = false;
     this.keydownHandler = null;
@@ -49,37 +64,35 @@ class SettingsPanel {
     panel.className = "cf-potd-settings-panel";
     panel.style.display = "none";
 
-    const username = this.userData?.username || "Unknown";
-    // Show an em-dash for genuinely missing rating rather than defaulting
-    // to a misleading 800.
-    const rating = this.userData?.rating != null ? this.userData.rating : "—";
+    const handle = this.user?.userID || "Unknown";
+    const rating = this.user?.rating ?? "—";
 
     panel.innerHTML = `
       <div class="settings-overlay"></div>
       <div class="settings-content">
         <div class="settings-header">
-          <h3>⚙️ Settings</h3>
+          <h3>Settings</h3>
           <button class="settings-close-btn" title="Close">×</button>
         </div>
 
         <div class="settings-body">
           <div class="settings-section">
-            <h4>User Information</h4>
+            <h4>User</h4>
             <div class="info-row">
-              <span class="info-label">Handle:</span>
-              <span id="settings-user-handle" class="info-value">${username}</span>
+              <span class="info-label">Handle</span>
+              <span id="settings-user-handle" class="info-value">${handle}</span>
             </div>
             <div class="info-row">
-              <span class="info-label">Rating:</span>
+              <span class="info-label">Rating</span>
               <span id="settings-user-rating" class="info-value">${rating}</span>
             </div>
           </div>
 
           <div class="settings-section">
             <h4>Actions</h4>
-            <button id="settings-refresh-rating" class="settings-btn">🔄 Refresh Rating</button>
-            <button id="settings-refresh-problems" class="settings-btn">📅 Refresh Problems</button>
-            <button id="settings-change-user" class="settings-btn">👤 Change User</button>
+            <button id="settings-refresh-rating" class="settings-btn">Refresh rating</button>
+            <button id="settings-refresh-problems" class="settings-btn">Refresh problems</button>
+            <button id="settings-change-user" class="settings-btn">Change user</button>
           </div>
 
           <div class="settings-section">
@@ -87,29 +100,20 @@ class SettingsPanel {
             <div class="setting-toggle">
               <label>
                 <input type="checkbox" id="setting-dark-mode" />
-                <span>Dark Mode</span>
+                <span>Dark mode</span>
               </label>
             </div>
             <div class="setting-toggle">
               <label>
                 <input type="checkbox" id="setting-animations" checked />
-                <span>Enable Animations</span>
-              </label>
-            </div>
-            <div class="setting-toggle">
-              <label>
-                <input type="checkbox" id="setting-notifications" />
-                <span>Daily Reminders</span>
+                <span>Animations</span>
               </label>
             </div>
           </div>
 
           <div class="settings-section">
             <h4>About</h4>
-            <p class="about-text">
-              Codeforces POTD Extension v2.0<br/>
-              Track your daily problem-solving streak!
-            </p>
+            <p class="about-text">Codeforces POTD · v2.5</p>
           </div>
         </div>
       </div>
@@ -123,18 +127,19 @@ class SettingsPanel {
   attachEventListeners() {
     const $ = (sel) => this.container.querySelector(sel);
 
-    $(".settings-close-btn")?.addEventListener("click", () => this.close());
-    $(".settings-overlay")?.addEventListener("click", () => this.close());
-    $("#settings-refresh-rating")?.addEventListener("click", () => this.handleRefreshRating());
-    $("#settings-refresh-problems")?.addEventListener("click", () => this.handleRefreshProblems());
-    $("#settings-change-user")?.addEventListener("click", () => this.handleChangeUser());
-    $("#setting-dark-mode")?.addEventListener("change", (e) =>
-      document.documentElement.classList.toggle("cf-potd-dark-mode", e.target.checked)
-    );
-    $("#setting-animations")?.addEventListener("change", (e) =>
+    $(".settings-close-btn").addEventListener("click", () => this.close());
+    $(".settings-overlay").addEventListener("click", () => this.close());
+    $("#settings-refresh-rating").addEventListener("click", () => this.handleRefreshRating());
+    $("#settings-refresh-problems").addEventListener("click", () => this.handleRefreshProblems());
+    $("#settings-change-user").addEventListener("click", () => this.handleChangeUser());
+
+    const darkToggle = $("#setting-dark-mode");
+    darkToggle.checked = isDarkActive();
+    darkToggle.addEventListener("change", (e) => applyDarkPreference(e.target.checked));
+
+    $("#setting-animations").addEventListener("change", (e) =>
       document.documentElement.classList.toggle("cf-potd-no-animations", !e.target.checked)
     );
-    // Notifications are wired but no-op until the notifications sprint.
 
     this.keydownHandler = (e) => {
       if (e.key === "Escape" && this.isOpen) this.close();
@@ -146,14 +151,12 @@ class SettingsPanel {
     if (!this.container) return;
     this.container.style.display = "block";
     this.isOpen = true;
-    // Next tick so the CSS transition has an initial frame to animate from.
     setTimeout(() => this.container.classList.add("settings-open"), 10);
   }
 
   close() {
     if (!this.container) return;
     this.container.classList.remove("settings-open");
-    // Match CSS transition duration so we hide only after it finishes.
     setTimeout(() => {
       this.container.style.display = "none";
       this.isOpen = false;
@@ -163,117 +166,75 @@ class SettingsPanel {
   async handleRefreshRating() {
     const btn = this.container.querySelector("#settings-refresh-rating");
     const originalText = btn.textContent;
-
     try {
-      await runButtonWorkflow(btn, originalText, "⏳ Refreshing...", async () => {
-        const userData = await window.storage.get(window.storageKeys.USER_DATA);
-        const handle = userData?.username;
-        if (!handle) throw new Error("No user found");
+      await runButton(btn, originalText, "Refreshing…", async () => {
+        const stored = await window.storage.get(window.storageKeys.USER);
+        if (!stored?.userID) throw new Error("No user in storage");
 
-        const oldRating = unwrapUserFromStorage(
-          await window.storage.get(window.storageKeys.USER_INFO)
-        )?.rating ?? null;
+        const prev = stored.rating;
+        const { user, today } = await window.api.refreshRating(stored.userID);
+        await window.storage.set(window.storageKeys.USER, user);
+        await window.storage.set(window.storageKeys.TODAY, today);
 
-        // getOrCreateUser always re-syncs from Codeforces, so we can lean
-        // on it instead of duplicating the fetch here.
-        const updatedUser = await window.api.getOrCreateUser(handle);
-        const newRating = updatedUser.rating ?? null;
-        await window.storage.set(window.storageKeys.USER_INFO, [updatedUser]);
+        this.updateUser(user);
 
-        const ratingEl = this.container.querySelector("#settings-user-rating");
-        if (ratingEl) ratingEl.textContent = newRating ?? "—";
-        this.userData = { ...(this.userData || {}), rating: newRating };
-
-        if (oldRating !== newRating) {
-          await this.refreshProblemsForRating(handle, newRating);
-          if (window.refreshCalendar) window.refreshCalendar();
-          return "✅ All Updated!";
+        if (prev !== user.rating) {
+          // Rating changed → refresh the month view (different problem bucket).
+          const monthView = await window.contentBridge.fetchMonthView(user);
+          await window.storage.set(window.storageKeys.MONTH_VIEW, monthView);
+          window.refreshCalendar?.();
+          return "Updated";
         }
-        if (window.refreshCalendar) window.refreshCalendar();
-        return "✅ Updated!";
+        window.refreshCalendar?.();
+        return "No change";
       });
     } catch (err) {
-      window.errorHandler.logError("SettingsPanel_refreshRating", err);
-    }
-  }
-
-  async refreshProblemsForRating(handle, rating) {
-    try {
-      const { month, year } = window.dateUtils.getCurrentMonthAndYear();
-      const problemsData = await window.api.getMonthlyProblems(month, year, rating);
-      const formatted = new window.SetupForm().formatProblems(problemsData, month, year, rating);
-      if (!formatted || formatted.length === 0) {
-        console.warn("[settings] no problems found for rating", rating);
-        return;
-      }
-      await window.storage.set(window.storageKeys.PROBLEM_DATA, formatted);
-    } catch (err) {
-      console.error("[settings] problem refresh failed:", err);
+      window.log.error("[settings] refreshRating:", err);
     }
   }
 
   async handleRefreshProblems() {
     const btn = this.container.querySelector("#settings-refresh-problems");
     const originalText = btn.textContent;
-
     try {
-      await runButtonWorkflow(btn, originalText, "⏳ Refreshing...", async () => {
-        const userData = await window.storage.get(window.storageKeys.USER_DATA);
-        const userInfo = await window.storage.get(window.storageKeys.USER_INFO);
-        const handle = userData?.username;
-        const rating = unwrapUserFromStorage(userInfo)?.rating || 800;
-
-        if (!handle) throw new Error("No user found");
-
-        const { month, year } = window.dateUtils.getCurrentMonthAndYear();
-        const problemsData = await window.api.getMonthlyProblems(month, year, rating);
-        const formatted = new window.SetupForm().formatProblems(problemsData, month, year, rating);
-        if (!formatted || formatted.length === 0) {
-          throw new Error(`No problems found for ${month}/${year} with rating ${rating}`);
-        }
-
-        await window.storage.set(window.storageKeys.PROBLEM_DATA, formatted);
-        if (window.refreshCalendar) window.refreshCalendar();
-        return "✅ Updated!";
-      }, 3000);
+      await runButton(btn, originalText, "Refreshing…", async () => {
+        const user = await window.storage.get(window.storageKeys.USER);
+        if (!user?.userID) throw new Error("No user in storage");
+        const monthView = await window.contentBridge.fetchMonthView(user);
+        await window.storage.set(window.storageKeys.MONTH_VIEW, monthView);
+        window.refreshCalendar?.();
+        return "Updated";
+      }, 2500);
     } catch (err) {
-      window.errorHandler.logError("SettingsPanel_refreshProblems", err);
+      window.log.error("[settings] refreshProblems:", err);
     }
   }
 
   async handleChangeUser() {
-    const confirmed = confirm(
-      "This will clear your current data and show the setup screen. Continue?"
-    );
-    if (!confirmed) return;
-    try {
-      await window.storage.clear();
-      this.close();
-      window.location.reload();
-    } catch (err) {
-      window.errorHandler.logError("SettingsPanel_changeUser", err);
-      alert("Failed to change user. Please try again.");
+    // Lightweight inline swap — doesn't wipe the extension, doesn't show
+    // the full onboarding form. content.js owns the prompt since it needs
+    // to update the calendar in place.
+    if (typeof window.promptChangeUser !== "function") {
+      window.log.error("[settings] promptChangeUser not ready");
+      return;
     }
+    const result = await window.promptChangeUser();
+    if (result?.ok) this.close();
   }
 
-  /** Update after external state changes (e.g. background rating sync). */
-  updateUserData(userData) {
-    this.userData = userData;
+  /** Replace the user shown in the panel after an external refresh. */
+  updateUser(user) {
+    this.user = user;
     if (!this.container) return;
-
-    const usernameEl = this.container.querySelector("#settings-user-handle");
-    const ratingEl = this.container.querySelector("#settings-user-rating");
-    if (usernameEl) usernameEl.textContent = userData?.username || "Unknown";
-    if (ratingEl) ratingEl.textContent = userData?.rating != null ? userData.rating : "—";
+    const h = this.container.querySelector("#settings-user-handle");
+    const r = this.container.querySelector("#settings-user-rating");
+    if (h) h.textContent = user?.userID || "Unknown";
+    if (r) r.textContent = user?.rating ?? "—";
   }
 
   destroy() {
-    if (this.keydownHandler) {
-      document.removeEventListener("keydown", this.keydownHandler);
-    }
-    if (this.container && this.container.parentNode) {
-      this.container.parentNode.removeChild(this.container);
-    }
+    if (this.keydownHandler) document.removeEventListener("keydown", this.keydownHandler);
+    this.container?.parentNode?.removeChild(this.container);
   }
 }
 

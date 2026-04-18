@@ -66,12 +66,22 @@ window.log = {
   error(...args) { console.error(...args); }
 };
 
+/**
+ * V3 storage schema. Flat, no nested arrays, no dual shapes.
+ *   user:         { userID, rating, ratingUpdatedAt, createdAt }
+ *   today:        { dateISO, problem, streak: { length, lastSolvedDate, includesToday } }
+ *   monthView:    { rating, from, to, items: [{dateISO, problem}], solvedDays: { iso: true } }
+ *   lastSyncedAt: ISO timestamp of the last successful POST /users reconciliation
+ */
 window.storageKeys = {
-  USER_DATA: "userData",
-  USER_INFO: "userInfo",
-  PROBLEM_DATA: "problemData",
-  LAST_SOLVED_DATE: "lastSolvedDate"
+  USER: "user",
+  TODAY: "today",
+  MONTH_VIEW: "monthView",
+  LAST_SYNCED_AT: "lastSyncedAt"
 };
+
+/** Minimum gap between background user syncs. Ratings change rarely. */
+window.SYNC_THROTTLE_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 window.errorHandler = {
   logError(context, error) {

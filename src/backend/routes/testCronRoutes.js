@@ -14,15 +14,21 @@ const { handle } = require("../lib/http");
 const router = express.Router();
 
 /** Pull latest problems from Codeforces into the `problems` collection. */
-router.post("/refresh-global-problems", handle(async () => ({
-  success: true,
-  stats: await problemService.refreshGlobalProblems()
-})));
+router.post(
+  "/refresh-global-problems",
+  handle(async () => ({
+    success: true,
+    stats: await problemService.refreshGlobalProblems()
+  }))
+);
 
 /** Trim old submissions (default: older than 90 days). */
-router.post("/prune-submissions", handle(async (req) => ({
-  success: true,
-  stats: await submissionService.pruneOldSubmissions(req.body?.cutoffISO)
-})));
+router.post(
+  "/prune-submissions",
+  handle(async (req) => ({
+    success: true,
+    stats: await submissionService.pruneOldSubmissions(req.body?.cutoffISO)
+  }))
+);
 
 module.exports = router;

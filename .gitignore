@@ -6,6 +6,7 @@ bundle.js
 build/
 dist/
 npm-debug.log
+coverage/
 
 /.idea
 /public

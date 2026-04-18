@@ -1,9 +1,14 @@
 /**
- * Content script — calendar-only architecture.
+ * Content script (V3).
  *
- * Renders the POTD calendar in the Codeforces sidebar, handles the onboarding
- * setup form for first-time users, and owns the settings panel. Background
- * syncs with our backend are fire-and-forget so the UI is never blocked.
+ * Renders the POTD calendar inside the Codeforces sidebar. Owns the
+ * onboarding form and the settings panel. Backend syncs are fire-and-forget
+ * so cached storage always drives the first paint, then we reconcile.
+ *
+ * Data shapes in storage (see config.js):
+ *   user      { userID, rating, ratingUpdatedAt, createdAt }
+ *   today     { dateISO, problem, streak: { length, lastSolvedDate, includesToday } }
+ *   monthView { rating, from, to, items: [{dateISO, problem}], solvedDays: { iso: true } }
  */
 
 if (typeof window.cfPotdIsRefreshing === "undefined") {
@@ -17,29 +22,34 @@ const MONTH_NAMES = [
   "July", "August", "September", "October", "November", "December"
 ];
 
-// ---------- storage helpers ----------
+// ---------- month-view helper (shared with SetupForm/SettingsPanel) ----------
 
-/**
- * userInfo in storage is sometimes `[user]`, sometimes `[[user]]` depending
- * on who wrote it last. Tolerate both until the data layer is flattened in
- * the standardize-data sprint.
- */
-function unwrapUser(userInfo) {
-  if (!userInfo) return null;
-  if (Array.isArray(userInfo) && userInfo.length > 0) {
-    return Array.isArray(userInfo[0]) ? userInfo[0][0] : userInfo[0];
-  }
-  if (typeof userInfo === "object") return userInfo;
-  return null;
+function currentMonthRange() {
+  const now = new Date();
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
+  const first = new Date(Date.UTC(y, m, 1));
+  const last = new Date(Date.UTC(y, m + 1, 0));
+  const fmt = window.dateUtils.formatDateToUTCISO;
+  return { from: fmt(first), to: fmt(last), year: y, monthIdx: m };
 }
 
-function extractUserRating(userInfo) {
-  return unwrapUser(userInfo)?.rating ?? null;
+async function fetchMonthView(user) {
+  const { from, to } = currentMonthRange();
+  const [problems, submissions] = await Promise.all([
+    window.api.getProblemsInRange(user.rating, from, to),
+    window.api.getSubmissions(user.userID, from, to)
+  ]);
+  return {
+    rating: user.rating,
+    from,
+    to,
+    items: problems.items || [],
+    solvedDays: submissions.solvedDays || {}
+  };
 }
 
-function extractUserHandle(userInfo, userData) {
-  return unwrapUser(userInfo)?.userID || userData?.username || "Unknown";
-}
+window.contentBridge = { fetchMonthView };
 
 // ---------- bootstrapping ----------
 
@@ -47,74 +57,169 @@ async function initializeExtension() {
   window.log.debug("[cf-potd] initializing");
 
   try {
-    const userData = await window.storage.get(window.storageKeys.USER_DATA);
-    const userInfo = await window.storage.get(window.storageKeys.USER_INFO);
-    const problemData = await window.storage.get(window.storageKeys.PROBLEM_DATA);
+    await applyTheme();
 
-    const hasUser = userData && userData.username;
-    const hasData = userInfo && problemData;
-
-    if (!hasUser || !hasData) {
+    const user = await window.storage.get(window.storageKeys.USER);
+    if (!user?.userID) {
       showSetupForm();
       return;
     }
 
-    // Fast path: render from cache, then reconcile with backend.
     await createCalendar();
     await initializeSettingsPanel();
-    syncUserInBackground();
-  } catch (error) {
-    window.errorHandler.logError("initializeExtension", error);
+    syncWithBackend();
+  } catch (err) {
+    window.log.error("[cf-potd] init failed:", err);
   }
 }
 
 /**
- * Silently reconcile the stored user with the backend.
+ * Theme resolution (order matters):
+ *   1. User override in storage wins (`themeOverride` = "dark" | "light").
+ *   2. Otherwise we match Codeforces' own page theme so the calendar never
+ *      looks orphaned next to a light CF page (or vice versa).
  *
- * Our POST /users endpoint always pulls the latest rating from Codeforces,
- * so if the rating has drifted we refresh problems for the new rating bucket
- * and re-render. Failures are non-fatal — the extension keeps working with
- * cached data when the backend is unreachable.
+ * The `prefers-color-scheme` media query is deliberately NOT consulted —
+ * users found it confusing when their system preferred dark but CF itself
+ * was rendering light, producing a dark calendar stapled to a white page.
  */
-async function syncUserInBackground() {
+async function applyTheme() {
+  const override = await window.storage.get("themeOverride");
+  const html = document.documentElement;
+  if (override === "dark") {
+    html.classList.add("cf-potd-dark-mode");
+    html.classList.remove("cf-potd-light-mode");
+    return;
+  }
+  if (override === "light") {
+    html.classList.add("cf-potd-light-mode");
+    html.classList.remove("cf-potd-dark-mode");
+    return;
+  }
+  const cfIsDark = detectCodeforcesTheme() === "dark";
+  html.classList.toggle("cf-potd-dark-mode", cfIsDark);
+  html.classList.toggle("cf-potd-light-mode", !cfIsDark);
+}
+
+/**
+ * Detect whether Codeforces is currently rendering in a dark theme by
+ * sampling the body's computed background luminance. More robust than
+ * sniffing class names — works with both CF's native dark and any
+ * third-party darkening extensions the user has installed.
+ */
+function detectCodeforcesTheme() {
   try {
-    const userData = await window.storage.get(window.storageKeys.USER_DATA);
-    const handle = userData?.username;
-    if (!handle) return;
+    const bg = getComputedStyle(document.body).backgroundColor;
+    const m = bg.match(/rgba?\(([^)]+)\)/);
+    if (!m) return "light";
+    const [r, g, b] = m[1].split(",").map((s) => parseFloat(s.trim()));
+    // Rec.709 relative luminance, normalized to 0–1.
+    const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+    return lum < 0.5 ? "dark" : "light";
+  } catch {
+    return "light";
+  }
+}
 
-    const oldRating = extractUserRating(
-      await window.storage.get(window.storageKeys.USER_INFO)
-    );
+window.detectCodeforcesTheme = detectCodeforcesTheme;
 
-    const freshUser = await window.api.getOrCreateUser(handle);
-    const newRating = freshUser?.rating ?? null;
-    await window.storage.set(window.storageKeys.USER_INFO, [freshUser]);
+/**
+ * Reconcile cached user/today/monthView with the backend. Runs at most once
+ * per SYNC_THROTTLE_MS to avoid hitting /users on every CF navigation —
+ * ratings only change after contests, so frequent syncs are wasted calls.
+ *
+ * The solved-today verification still runs every load (self-limiting: it
+ * no-ops once today is solved), so newly-solved problems update promptly.
+ */
+async function syncWithBackend({ force = false } = {}) {
+  try {
+    const cached = await window.storage.get(window.storageKeys.USER);
+    if (!cached?.userID) return;
 
-    if (oldRating === newRating) {
-      window.log.debug(`[cf-potd] rating unchanged (${newRating})`);
+    const { from, to } = currentMonthRange();
+    const cachedView = await window.storage.get(window.storageKeys.MONTH_VIEW);
+    const viewStale = !cachedView
+      || cachedView.from !== from
+      || cachedView.to !== to
+      || cachedView.rating !== cached.rating;
+
+    const today = await window.storage.get(window.storageKeys.TODAY);
+    const todayStale = !today || today.dateISO !== window.dateUtils.getTodayISO();
+
+    const lastSyncedAt = await window.storage.get(window.storageKeys.LAST_SYNCED_AT);
+    const throttled = lastSyncedAt
+      && !force && !viewStale && !todayStale
+      && Date.now() - new Date(lastSyncedAt).getTime() < window.SYNC_THROTTLE_MS;
+
+    // Still worth checking for a new AC even if we skip the user sync.
+    if (throttled) {
+      window.log.debug("[cf-potd] user sync throttled");
+      if (!today?.streak?.includesToday) {
+        maybeVerifyTodaysSubmission(cached.userID, today?.problem);
+      }
       return;
     }
 
-    console.log(`[cf-potd] rating drift ${oldRating} -> ${newRating}, refreshing`);
+    const fresh = await window.api.getOrCreateUser(cached.userID);
+    await window.storage.set(window.storageKeys.USER, fresh.user);
+    await window.storage.set(window.storageKeys.TODAY, fresh.today);
+    await window.storage.set(window.storageKeys.LAST_SYNCED_AT, new Date().toISOString());
 
-    try {
-      const { month, year } = window.dateUtils.getCurrentMonthAndYear();
-      const problemsData = await window.api.getMonthlyProblems(month, year, newRating);
-      const formattedProblems = new window.SetupForm()
-        .formatProblems(problemsData, month, year, newRating);
-      if (formattedProblems && formattedProblems.length > 0) {
-        await window.storage.set(window.storageKeys.PROBLEM_DATA, formattedProblems);
-      }
-    } catch (err) {
-      console.warn("[cf-potd] problem refresh after rating change failed:", err.message);
+    const ratingChanged = cached.rating !== fresh.user.rating;
+    if (ratingChanged || viewStale) {
+      const monthView = await fetchMonthView(fresh.user);
+      await window.storage.set(window.storageKeys.MONTH_VIEW, monthView);
     }
 
-    if (settingsPanelInstance) {
-      settingsPanelInstance.updateUserData({ username: handle, rating: newRating });
+    settingsPanelInstance?.updateUser(fresh.user);
+    window.refreshCalendar?.();
+
+    if (!fresh.today?.streak?.includesToday) {
+      maybeVerifyTodaysSubmission(fresh.user.userID, fresh.today?.problem);
     }
-    if (window.refreshCalendar) window.refreshCalendar();
   } catch (err) {
-    console.warn("[cf-potd] background sync failed (non-critical):", err.message);
+    window.log.warn("[cf-potd] backend sync skipped:", err.message);
+  }
+}
+
+window.syncWithBackend = syncWithBackend;
+
+/**
+ * If today's POTD hasn't been recorded yet, check Codeforces directly to
+ * see whether the user solved it on their own, and if so record the
+ * submission server-side. Updates the streak in place.
+ */
+async function maybeVerifyTodaysSubmission(handle, problem) {
+  if (!problem?.cfId) return;
+  try {
+    const check = await window.api.verifySubmission(handle, problem.cfId);
+    if (!check.verified) return;
+
+    const { streak } = await window.api.recordSubmission(handle, problem.cfId);
+    const today = await window.storage.get(window.storageKeys.TODAY);
+    if (today) {
+      today.streak = streak;
+      await window.storage.set(window.storageKeys.TODAY, today);
+    }
+
+    // Refresh solvedDays so the cell flips immediately.
+    const user = await window.storage.get(window.storageKeys.USER);
+    if (user) {
+      const monthView = await fetchMonthView(user);
+      await window.storage.set(window.storageKeys.MONTH_VIEW, monthView);
+    }
+    window.refreshCalendar?.();
+
+    // Small celebratory pulse on the streak pill. Runs after refreshCalendar
+    // has re-rendered so the new element picks up the class.
+    requestAnimationFrame(() => {
+      const pill = document.getElementById("calendar-streak-container");
+      if (!pill) return;
+      pill.classList.add("pulse");
+      setTimeout(() => pill.classList.remove("pulse"), 500);
+    });
+  } catch (err) {
+    window.log.warn("[cf-potd] submission verify failed:", err.message);
   }
 }
 
@@ -123,7 +228,7 @@ async function syncUserInBackground() {
 function showSetupForm() {
   const sidebar = document.getElementById("sidebar");
   if (!sidebar) {
-    console.error("[cf-potd] sidebar not found, cannot show setup form");
+    window.log.error("[cf-potd] sidebar not found");
     return;
   }
 
@@ -131,12 +236,11 @@ function showSetupForm() {
   setupForm.onSetupComplete = async () => {
     try {
       setupForm.destroy();
-      // Let the DOM settle before re-rendering where the form just was.
       await new Promise((resolve) => setTimeout(resolve, 100));
       await createCalendar();
       await initializeSettingsPanel();
-    } catch (error) {
-      console.error("[cf-potd] setup completion failed:", error);
+    } catch (err) {
+      window.log.error("[cf-potd] setup completion failed:", err);
       alert("Error loading calendar. Please refresh the page.");
     }
   };
@@ -148,163 +252,116 @@ function showSetupForm() {
 
 async function initializeSettingsPanel() {
   if (settingsPanelInstance) settingsPanelInstance.destroy();
+  const user = await window.storage.get(window.storageKeys.USER);
 
-  const userData = await window.storage.get(window.storageKeys.USER_DATA);
-  const userInfo = await window.storage.get(window.storageKeys.USER_INFO);
-
-  settingsPanelInstance = new window.SettingsPanel({
-    username: userData?.username || "Unknown",
-    rating: extractUserRating(userInfo)
-  });
+  settingsPanelInstance = new window.SettingsPanel(user);
   document.body.appendChild(settingsPanelInstance.render());
 }
 
 function addSettingsIcon() {
   const calendarHeader = document.querySelector(".calendar-header th");
-  if (!calendarHeader) {
-    console.warn("[cf-potd] calendar header not found");
-    return;
-  }
+  if (!calendarHeader) return;
   if (calendarHeader.querySelector(".calendar-settings-icon")) return;
 
-  const settingsBtn = document.createElement("button");
-  settingsBtn.className = "calendar-settings-icon";
-  settingsBtn.innerHTML = "⚙️";
-  settingsBtn.title = "Settings";
-  settingsBtn.addEventListener("click", (e) => {
+  const btn = document.createElement("button");
+  btn.className = "calendar-settings-icon";
+  btn.innerHTML = "<span aria-hidden=\"true\">⚙</span>";
+  btn.setAttribute("aria-label", "Settings");
+  btn.title = "Settings";
+  btn.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (settingsPanelInstance) settingsPanelInstance.open();
+    settingsPanelInstance?.open();
   });
 
   const headerText = calendarHeader.innerHTML;
   calendarHeader.innerHTML = `
-    <div style="display: flex; justify-content: space-between; align-items: center;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
       <span>${headerText}</span>
-      <span style="margin-left: auto;"></span>
+      <span></span>
     </div>
   `;
-  calendarHeader.querySelector("span:last-child").appendChild(settingsBtn);
+  calendarHeader.querySelector("span:last-child").appendChild(btn);
 }
 
 // ---------- calendar ----------
 
 async function createCalendar() {
   try {
-    const currentDate = new Date();
-    const currentYear = currentDate.getUTCFullYear();
-    const currentMonth = currentDate.getUTCMonth();
-    const displayMonth = currentMonth + 1;
-
-    const result = await window.storage.getMultiple([
-      window.storageKeys.PROBLEM_DATA,
-      window.storageKeys.USER_INFO,
-      window.storageKeys.USER_DATA
+    const [user, today, monthView] = await Promise.all([
+      window.storage.get(window.storageKeys.USER),
+      window.storage.get(window.storageKeys.TODAY),
+      window.storage.get(window.storageKeys.MONTH_VIEW)
     ]);
 
-    const problemData = result.problemData || [];
-    const userHandle = extractUserHandle(result.userInfo, result.userData);
+    const handle = user?.userID || "Unknown";
+    const rating = user?.rating ?? null;
+    const streakCount = today?.streak?.length ?? 0;
 
-    if (userHandle !== "Unknown") {
-      try {
-        await window.streak.syncStreakDaysWithDatabase(userHandle);
-      } catch (error) {
-        window.errorHandler.logError("createCalendar_syncStreak", error);
-      }
+    const { year, monthIdx } = currentMonthRange();
+    const referenceDay = new Date().getUTCDate();
 
-      try {
-        if (await window.streak.shouldResetStreak()) {
-          console.log("[cf-potd] auto-resetting streak due to gap");
-          const updatedUser = await window.api.updateUserStreak(userHandle, 0);
-          if (updatedUser) {
-            await window.storage.set(window.storageKeys.USER_INFO, [updatedUser]);
-          }
-        }
-      } catch (error) {
-        window.errorHandler.logError("createCalendar_streakCheck", error);
-      }
+    const problemByDate = new Map();
+    for (const item of monthView?.items || []) {
+      if (item?.dateISO && item.problem) problemByDate.set(item.dateISO, item.problem);
     }
+    const solvedDays = monthView?.solvedDays || {};
 
-    if (!window.cfPotdIsRefreshing && userHandle !== "Unknown") {
-      await maybeVerifyTodaysSubmission(userHandle, problemData);
-    }
-
-    const streakCount = await computeStreakCount(result.userInfo);
-
-    const calendarHTML = buildCalendarHTML({
-      currentYear, currentMonth, displayMonth,
-      userHandle, streakCount, problemData,
-      referenceDate: currentDate.getUTCDate()
+    const html = buildCalendarHTML({
+      year,
+      monthIdx,
+      handle,
+      rating,
+      streakCount,
+      problemByDate,
+      solvedDays,
+      referenceDay
     });
-
-    injectCalendar(calendarHTML);
-  } catch (error) {
-    window.errorHandler.logError("createCalendar", error);
+    injectCalendar(html);
+  } catch (err) {
+    window.log.error("[cf-potd] createCalendar failed:", err);
   } finally {
     window.cfPotdIsRefreshing = false;
   }
-
-  markCalendarBasedOnStreak();
 }
 
-async function maybeVerifyTodaysSubmission(userHandle, problemData) {
-  try {
-    const todayISO = window.dateUtils.getTodayISO();
-    const todaysProblem = problemData.find((p) => {
-      if (!p || !p.date) return false;
-      return p.date.split("T")[0] === todayISO;
-    });
-    if (!todaysProblem) return;
-
-    const lastSolvedDate = await window.storage.get(window.storageKeys.LAST_SOLVED_DATE);
-    if (lastSolvedDate === todayISO) {
-      window.log.debug(`[cf-potd] today already verified (${todayISO})`);
-      return;
-    }
-
-    const result = await window.api.verifySubmission(userHandle, todaysProblem);
-    if (result.verified) {
-      console.log("[cf-potd] today's submission verified, updating streak");
-      await window.storage.set(window.storageKeys.LAST_SOLVED_DATE, todayISO);
-      await updateStreakAfterVerification(userHandle, todaysProblem);
-    }
-  } catch (error) {
-    console.error("[cf-potd] submission check failed:", error);
-  }
+/**
+ * Map a Codeforces rating to a class for the handle color.
+ * Tiers mirror https://codeforces.com/blog/entry/20638.
+ */
+function ratingTierClass(rating) {
+  if (rating == null) return "";
+  if (rating < 1200) return "tier-newbie";
+  if (rating < 1400) return "tier-pupil";
+  if (rating < 1600) return "tier-specialist";
+  if (rating < 1900) return "tier-expert";
+  if (rating < 2100) return "tier-cm";
+  if (rating < 2400) return "tier-master";
+  return "tier-gm";
 }
 
-async function computeStreakCount(userInfo) {
-  try {
-    return await window.streak.getCurrentStreak();
-  } catch (error) {
-    console.error("[cf-potd] streak calc failed, falling back to cached:", error.message);
-    const user = unwrapUser(userInfo);
-    const cached = user?.streak?.last_streak_count;
-    if (cached === undefined) return 0;
-    return typeof cached === "number" ? cached : parseInt(cached, 10) || 0;
-  }
-}
+function buildCalendarHTML({ year, monthIdx, handle, rating, streakCount, problemByDate, solvedDays, referenceDay }) {
+  const firstDay = new Date(Date.UTC(year, monthIdx, 1)).getUTCDay();
+  const daysInMonth = new Date(Date.UTC(year, monthIdx + 1, 0)).getUTCDate();
+  const displayMonth = (monthIdx + 1).toString().padStart(2, "0");
 
-function buildCalendarHTML({ currentYear, currentMonth, displayMonth, userHandle, streakCount, problemData, referenceDate }) {
-  const firstDay = new Date(Date.UTC(currentYear, currentMonth, 1)).getUTCDay();
-  const daysInMonth = new Date(Date.UTC(currentYear, currentMonth + 1, 0)).getUTCDate();
-
-  const problemByDate = new Map();
-  for (const p of problemData) {
-    if (p && p.date) problemByDate.set(p.date.split("T")[0], p);
-  }
+  const tier = ratingTierClass(rating);
+  const ratingText = rating != null ? `· ${rating}` : "";
+  const streakActive = streakCount > 0 ? " has-streak" : "";
 
   let html = `
     <div class="cf-potd-container">
       <table class="calendar">
         <tr class="calendar-header">
-          <th colspan="7">${MONTH_NAMES[currentMonth]} ${currentYear}</th>
+          <th colspan="7">${MONTH_NAMES[monthIdx]} ${year}</th>
         </tr>
         <tr class="user-info-row">
           <td colspan="7">
             <div class="user-info">
-              <a href="https://codeforces.com/profile/${userHandle}" target="_blank" class="user-handle">${userHandle}</a>
-              <div class="streak-container">
+              <a href="https://codeforces.com/profile/${handle}" target="_blank" class="user-handle ${tier}">
+                ${handle}<span class="user-rating"> ${ratingText}</span>
+              </a>
+              <div class="streak-container${streakActive}" id="calendar-streak-container">
                 <span class="streak-flame">🔥</span>
                 <span id="calendar-streak" class="streak-count">${streakCount}</span>
                 <span class="streak-label">day streak</span>
@@ -319,41 +376,49 @@ function buildCalendarHTML({ currentYear, currentMonth, displayMonth, userHandle
   `;
 
   let day = 1;
-  for (let i = 0; i < 6; i++) {
+  for (let row = 0; row < 6; row++) {
     html += "<tr>";
-    for (let j = 0; j < 7; j++) {
-      if (i === 0 && j < firstDay) {
+    for (let col = 0; col < 7; col++) {
+      if (row === 0 && col < firstDay) {
         html += "<td></td>";
       } else if (day > daysInMonth) {
         html += "<td></td>";
       } else {
-        const formattedMonth = displayMonth.toString().padStart(2, "0");
-        const formattedDay = day.toString().padStart(2, "0");
-        const isoDate = `${currentYear}-${formattedMonth}-${formattedDay}`;
+        const iso = `${year}-${displayMonth}-${day.toString().padStart(2, "0")}`;
+        const when = day < referenceDay ? "past" : day === referenceDay ? "today" : "future";
+        const solved = solvedDays[iso] === true;
 
-        const cellClass = day < referenceDate ? "past"
-          : day === referenceDate ? "today"
-          : "future";
-
-        const url = problemByDate.get(isoDate)?.url || "";
-        const cellContent = (url && day <= referenceDate)
+        const problem = problemByDate.get(iso);
+        const url = problem ? problemUrl(problem) : null;
+        const inner = (url && day <= referenceDay)
           ? `<a href="${url}" target="_blank">${day}</a>`
-          : day;
+          : `${day}`;
+        const tick = solved ? ' <span class="checkmark">✓</span>' : "";
+        const classes = [when, solved ? "solved" : ""].filter(Boolean).join(" ");
 
-        html += `<td class="${cellClass}" data-date="${isoDate}">${cellContent}</td>`;
+        html += `<td class="${classes}" data-date="${iso}">${inner}${tick}</td>`;
         day++;
       }
     }
     html += "</tr>";
-    if (day > daysInMonth && i < 5) {
+    if (day > daysInMonth && row < 5) {
       html += "<tr>" + "<td></td>".repeat(7) + "</tr>";
     }
   }
+
   html += "</table></div>";
   return html;
 }
 
-function injectCalendar(calendarHTML) {
+function problemUrl(problem) {
+  if (problem?.url) return problem.url;
+  if (problem?.contestId != null && problem?.index) {
+    return `https://codeforces.com/problemset/problem/${problem.contestId}/${problem.index}`;
+  }
+  return null;
+}
+
+function injectCalendar(html) {
   let sidebar = document.getElementById("sidebar");
   if (!sidebar) {
     const pageContent = document.querySelector(".content-with-sidebar");
@@ -364,120 +429,101 @@ function injectCalendar(calendarHTML) {
       pageContent.appendChild(sidebar);
     }
   }
-  if (!sidebar) {
-    console.error("[cf-potd] sidebar element not found");
-    return;
-  }
+  if (!sidebar) return;
 
   const existing = sidebar.querySelector(".calendar");
-  if (existing) {
-    existing.closest(".cf-potd-container")?.remove();
-  }
-  sidebar.insertAdjacentHTML("afterbegin", calendarHTML);
+  if (existing) existing.closest(".cf-potd-container")?.remove();
+  sidebar.insertAdjacentHTML("afterbegin", html);
   addSettingsIcon();
 }
 
 window.refreshCalendar = function () {
   if (window.cfPotdIsRefreshing) return;
   window.cfPotdIsRefreshing = true;
-
   document.querySelector(".cf-potd-container")?.remove();
   createCalendar();
 };
 
-// ---------- streak post-verification ----------
-
-async function updateStreakAfterVerification(userHandle) {
-  try {
-    const shouldReset = await window.streak.shouldResetStreak();
-    const newStreak = shouldReset
-      ? 1
-      : (await window.streak.getCurrentStreak()) + 1;
-
-    const updatedUser = await window.api.updateUserStreak(userHandle, newStreak, true);
-    await window.storage.set(window.storageKeys.USER_INFO, [updatedUser]);
-
-    updateStreakUI(newStreak);
-    markCalendarTick();
-
-    await window.streak.syncStreakDaysWithDatabase(userHandle);
-    return { success: true, newStreak, wasReset: shouldReset };
-  } catch (error) {
-    console.error("[cf-potd] updateStreakAfterVerification failed:", error);
-    return { success: false, error: error.message };
-  }
-}
-
-function appendCheckmark(cell) {
-  if (cell.innerHTML.includes("✔")) return;
-  const anchor = cell.querySelector("a");
-  if (anchor) {
-    anchor.insertAdjacentHTML("afterend", ' <span class="checkmark">✔</span>');
-  } else {
-    cell.innerHTML += ' <span class="checkmark">✔</span>';
-  }
-}
-
-function markCalendarTick() {
-  const todayISO = window.dateUtils.getTodayISO();
-  document.querySelectorAll(".calendar td").forEach((cell) => {
-    if (cell.getAttribute("data-date") === todayISO) {
-      cell.classList.add("solved");
-      appendCheckmark(cell);
-    }
-  });
-}
-
 /**
- * Mark cells for every date the user has solved, based on streak data.
- * Uses getDatesToMarkSolved() first; falls back to reading streak_days
- * directly from storage if that returns empty (handles upgrade paths where
- * the two data sources temporarily disagree).
+ * Switch to a different user without going through the full onboarding form.
+ *
+ * Shows a tiny inline prompt, POSTs to /users with the new handle (which
+ * fetches their rating from Codeforces), replaces the three storage keys,
+ * and re-renders in place. The settings panel stays open.
  */
-async function markCalendarBasedOnStreak() {
+window.promptChangeUser = async function promptChangeUser() {
+  const newHandle = await showHandlePrompt();
+  if (!newHandle) return { cancelled: true };
+
   try {
-    const datesToMark = await window.streak.getDatesToMarkSolved();
-    const cells = document.querySelectorAll(".calendar td");
+    const { user, today } = await window.api.getOrCreateUser(newHandle);
+    const monthView = await fetchMonthView(user);
 
-    if (datesToMark.length === 0) {
-      const streakDays = unwrapUser(
-        await window.storage.get(window.storageKeys.USER_INFO)
-      )?.streak?.streak_days || {};
+    await window.storage.set(window.storageKeys.USER, user);
+    await window.storage.set(window.storageKeys.TODAY, today);
+    await window.storage.set(window.storageKeys.MONTH_VIEW, monthView);
+    await window.storage.set(window.storageKeys.LAST_SYNCED_AT, new Date().toISOString());
 
-      if (Object.keys(streakDays).length === 0) return;
+    settingsPanelInstance?.updateUser(user);
+    window.refreshCalendar?.();
+    return { ok: true, user };
+  } catch (err) {
+    window.log.error("[cf-potd] change user failed:", err);
+    alert(err.message || "Could not switch user. Check the handle and try again.");
+    return { ok: false, error: err };
+  }
+};
 
-      cells.forEach((cell) => {
-        const cellDate = cell.getAttribute("data-date");
-        if (!cellDate) return;
-        const [y, m, d] = cellDate.split("-");
-        const keys = [
-          `${y}-${m.replace(/^0/, "")}-${d.replace(/^0/, "")}`,
-          `${y}-${parseInt(m, 10)}-${parseInt(d, 10)}`,
-          `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`
-        ];
-        if (keys.some((k) => streakDays[k] === true)) {
-          cell.classList.add("solved");
-          appendCheckmark(cell);
-        }
-      });
-      return;
+function showHandlePrompt() {
+  return new Promise((resolve) => {
+    const existing = document.querySelector(".cf-potd-handle-prompt");
+    existing?.remove();
+
+    const modal = document.createElement("div");
+    modal.className = "cf-potd-handle-prompt";
+    modal.innerHTML = `
+      <div class="handle-prompt-overlay"></div>
+      <div class="handle-prompt-card">
+        <h4>Switch user</h4>
+        <p>Enter a Codeforces handle. Your rating will be fetched automatically.</p>
+        <input type="text" class="handle-prompt-input" placeholder="e.g. tourist" autocomplete="off" />
+        <div class="handle-prompt-actions">
+          <button class="handle-prompt-cancel">Cancel</button>
+          <button class="handle-prompt-submit">Switch</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    const input = modal.querySelector(".handle-prompt-input");
+    const cancel = modal.querySelector(".handle-prompt-cancel");
+    const submit = modal.querySelector(".handle-prompt-submit");
+    const overlay = modal.querySelector(".handle-prompt-overlay");
+    setTimeout(() => input.focus(), 50);
+
+    function finish(value) {
+      modal.remove();
+      resolve(value);
+    }
+    function trySubmit() {
+      const v = input.value.trim();
+      if (!v) return input.focus();
+      if (!/^[a-zA-Z0-9_.\-]+$/.test(v)) {
+        input.classList.add("invalid");
+        return;
+      }
+      finish(v);
     }
 
-    cells.forEach((cell) => {
-      const cellDate = cell.getAttribute("data-date");
-      if (cellDate && datesToMark.includes(cellDate)) {
-        cell.classList.add("solved");
-        appendCheckmark(cell);
-      }
+    submit.addEventListener("click", trySubmit);
+    cancel.addEventListener("click", () => finish(null));
+    overlay.addEventListener("click", () => finish(null));
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") trySubmit();
+      if (e.key === "Escape") finish(null);
+      input.classList.remove("invalid");
     });
-  } catch (error) {
-    window.errorHandler.logError("markCalendarBasedOnStreak", error);
-  }
-}
-
-function updateStreakUI(streak) {
-  const streakElem = document.getElementById("calendar-streak");
-  if (streakElem) streakElem.textContent = streak;
+  });
 }
 
 // ---------- bootstrap ----------
@@ -492,7 +538,7 @@ if (window.location.href.includes("codeforces.com")) {
 
 chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
   if (request.action === "openSettings") {
-    if (settingsPanelInstance) settingsPanelInstance.open();
+    settingsPanelInstance?.open();
     sendResponse({ success: true });
   }
   return true;

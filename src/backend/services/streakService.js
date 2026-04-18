@@ -13,12 +13,14 @@ const { toISODate, addDays } = require("../lib/dates");
  * sorted desc), then walk backwards counting consecutive days. Bounded
  * by `maxLookbackDays` to guarantee constant work even for heavy users.
  */
-async function getCurrentStreak(userID, { now = new Date(), maxLookbackDays = 180 } = {}) {
+async function getCurrentStreak(userID, { now = new Date(), maxLookbackDays = 400 } = {}) {
   const todayISO = toISODate(now);
   const fromISO = toISODate(new Date(now.getTime() - maxLookbackDays * 86400000));
 
+  // Only count accepted solves — ignore WA/TLE/etc. if ever recorded.
   const dates = await Submission.distinct("dateISO", {
     userID,
+    verdict: "OK",
     dateISO: { $gte: fromISO, $lte: todayISO }
   });
 
@@ -54,6 +56,7 @@ async function getCurrentStreak(userID, { now = new Date(), maxLookbackDays = 18
 async function getSolvedDays(userID, fromISO, toISO) {
   const dates = await Submission.distinct("dateISO", {
     userID,
+    verdict: "OK",
     dateISO: { $gte: fromISO, $lte: toISO }
   });
   const map = {};

@@ -1,310 +1,474 @@
-:root {
-  --primary-color: #f9f9f9;
-  --secondary-color: #e6f2ff; /* Lighter blue */
-  --accent-color: #78a9e6; /* Pastel blue */
-  --accent-light: #d1e5ff; /* Very light blue */
-  --accent-dark: #5a8dd6; /* Slightly darker pastel blue */
-  --success-color: #a8d8a8; /* Pastel green */
-  --warning-color: #ffe0b2; /* Pastel orange */
-  --error-color: #ffbdbd; /* Pastel red */
-  --text-color: #555555; /* Softer text color */
-  --text-light: #999999;
-  --border-radius: 8px;
-  --shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-  --border-color: #e0e0e0;
+/**
+ * Codeforces POTD — Design system + calendar styles.
+ *
+ * Layer 1: design tokens (variables + base resets).
+ * Layer 2: calendar component (tables sit inside CF's sidebar).
+ *
+ * Component-specific overlays (setup form, settings panel, handle prompt)
+ * live in components/components.css and consume these tokens.
+ *
+ * Theme resolves in this order (see applyTheme in content.js):
+ *   1. `.cf-potd-light-mode` on <html> → force light (user override)
+ *   2. `.cf-potd-dark-mode`  on <html> → force dark  (user override)
+ *   3. otherwise we inherit Codeforces' own page theme (detected at runtime)
+ */
+
+/* ==========================================================================
+   Layer 1 — Design tokens
+   ========================================================================== */
+
+:root,
+.cf-potd-light-mode {
+  /* Brand — Codeforces blue, polished */
+  --cfp-brand: #1f8dd6;
+  --cfp-brand-hover: #1a78b5;
+  --cfp-brand-active: #1668a0;
+  --cfp-brand-soft: #e8f4fc;
+  --cfp-brand-tint: rgba(31, 141, 214, 0.10);
+  --cfp-brand-ring: rgba(31, 141, 214, 0.35);
+
+  /* Surface + neutrals */
+  --cfp-surface: #ffffff;
+  --cfp-surface-alt: #f7f8fa;
+  --cfp-surface-muted: #eef0f3;
+  --cfp-border: #e4e7eb;
+  --cfp-border-strong: #d0d5dc;
+
+  /* Text */
+  --cfp-text: #1f2937;
+  --cfp-text-muted: #6b7280;
+  --cfp-text-subtle: #9ca3af;
+  --cfp-text-inverse: #ffffff;
+
+  /* Semantic */
+  --cfp-success: #16a34a;
+  --cfp-success-soft: #dcfce7;
+  --cfp-success-tint: rgba(22, 163, 74, 0.10);
+  --cfp-warning: #d97706;
+  --cfp-warning-soft: #fef3c7;
+  --cfp-error: #dc2626;
+  --cfp-error-soft: #fee2e2;
+
+  /* Streak */
+  --cfp-flame: #ff6b35;
+  --cfp-flame-glow: rgba(255, 107, 53, 0.28);
+
+  /* Shadows (soft for modern feel) */
+  --cfp-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --cfp-shadow-md: 0 2px 8px rgba(15, 23, 42, 0.06);
+  --cfp-shadow-lg: 0 10px 28px rgba(15, 23, 42, 0.08);
+  --cfp-shadow-xl: 0 20px 50px rgba(15, 23, 42, 0.14);
+
+  /* Typography */
+  --cfp-font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --cfp-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --cfp-text-xs: 11px;
+  --cfp-text-sm: 12px;
+  --cfp-text-base: 13px;
+  --cfp-text-md: 14px;
+  --cfp-text-lg: 16px;
+  --cfp-text-xl: 20px;
+
+  /* Spacing (4px grid) */
+  --cfp-space-1: 4px;
+  --cfp-space-2: 8px;
+  --cfp-space-3: 12px;
+  --cfp-space-4: 16px;
+  --cfp-space-5: 20px;
+  --cfp-space-6: 24px;
+  --cfp-space-8: 32px;
+
+  /* Radii */
+  --cfp-radius-sm: 4px;
+  --cfp-radius: 6px;
+  --cfp-radius-md: 8px;
+  --cfp-radius-lg: 12px;
+  --cfp-radius-xl: 16px;
+  --cfp-radius-full: 9999px;
+
+  /* Motion */
+  --cfp-duration-fast: 120ms;
+  --cfp-duration: 180ms;
+  --cfp-duration-slow: 280ms;
+  --cfp-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --cfp-ease-out: cubic-bezier(0.0, 0, 0.2, 1);
+  --cfp-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Layout */
+  --cfp-calendar-width: 100%;
+  --cfp-cell-height: 32px;
 }
 
-/* Calendar Container */
+/* Dark theme is applied to <html> explicitly via .cf-potd-dark-mode.
+   We no longer follow prefers-color-scheme directly — Codeforces' own
+   page theme is the source of truth (applyTheme in content.js reads it
+   at render time and sets the matching override class). This prevents
+   the common "CF is light but my system is dark → calendar is dark"
+   mismatch. */
+.cf-potd-dark-mode {
+  --cfp-surface: #15171a;
+  --cfp-surface-alt: #1c1f23;
+  --cfp-surface-muted: #24282e;
+  --cfp-border: #2b2f35;
+  --cfp-border-strong: #3a3f46;
+
+  --cfp-text: #e6e8eb;
+  --cfp-text-muted: #9aa1ab;
+  --cfp-text-subtle: #6b7280;
+
+  --cfp-brand-soft: rgba(31, 141, 214, 0.18);
+  --cfp-brand-tint: rgba(31, 141, 214, 0.16);
+  --cfp-brand-ring: rgba(31, 141, 214, 0.55);
+
+  --cfp-success-soft: rgba(22, 163, 74, 0.18);
+  --cfp-success-tint: rgba(22, 163, 74, 0.18);
+  --cfp-warning-soft: rgba(217, 119, 6, 0.18);
+  --cfp-error-soft: rgba(220, 38, 38, 0.18);
+
+  --cfp-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --cfp-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --cfp-shadow-lg: 0 10px 28px rgba(0, 0, 0, 0.45);
+  --cfp-shadow-xl: 0 20px 50px rgba(0, 0, 0, 0.55);
+}
+
+/* Respect user's reduced-motion setting. */
+@media (prefers-reduced-motion: reduce) {
+  :root,
+  .cf-potd-dark-mode,
+  .cf-potd-light-mode {
+    --cfp-duration-fast: 0ms;
+    --cfp-duration: 0ms;
+    --cfp-duration-slow: 0ms;
+  }
+}
+
+.cf-potd-no-animations *,
+.cf-potd-no-animations *::before,
+.cf-potd-no-animations *::after {
+  animation-duration: 0s !important;
+  transition-duration: 0s !important;
+}
+
+/* ==========================================================================
+   Layer 2 — Calendar component
+   ========================================================================== */
+
 .cf-potd-container {
-  /* padding: 10px; */
-  margin: 20px 0;
-  background-color: #fff;
-  border-radius: var(--border-radius);
-  /* box-shadow: var(--shadow); */
-  /* border: 1px solid var(--border-color); */
-  max-width: 350px; /* Add max-width to prevent overflow */
-  box-sizing: border-box; /* Include padding in the width calculation */
+  margin: var(--cfp-space-5) 0;
+  padding: 0;
+  font-family: var(--cfp-font);
+  color: var(--cfp-text);
+  animation: cfp-fade-in var(--cfp-duration-slow) var(--cfp-ease-out);
+  box-sizing: border-box;
 }
 
-/* Calendar Table */
+.cf-potd-container * {
+  box-sizing: border-box;
+}
+
 .calendar {
   width: 100%;
   border-collapse: separate;
-  border-spacing: 2px;
-  font-family: 'Segoe UI', Arial, sans-serif;
+  border-spacing: 4px;
+  background: var(--cfp-surface);
+  border: 1px solid var(--cfp-border);
+  border-radius: var(--cfp-radius-lg);
+  padding: var(--cfp-space-2);
+  box-shadow: var(--cfp-shadow-md);
+  table-layout: fixed;
   overflow: hidden;
-  transform: scale(0.98);
-  transition: all 0.15s ease-in-out;
-  table-layout: fixed; /* Ensure equal column widths */
 }
 
-/* .calendar:hover {
-  transform: scale(1);
-} */
+/* ---------- Calendar header ---------- */
 
-/* Calendar Header */
 .calendar-header th {
-  background-color: var(--accent-color);
-  color: white;
-  padding: 12px;
-  font-size: 1.1em;
+  background: transparent;
+  color: var(--cfp-text);
+  padding: var(--cfp-space-3) var(--cfp-space-2);
+  font-size: var(--cfp-text-md);
+  font-weight: 600;
+  letter-spacing: -0.01em;
   text-align: center;
-  border-radius: var(--border-radius) var(--border-radius) 0 0;
+  border-radius: var(--cfp-radius-md);
+  border-bottom: 1px solid var(--cfp-border);
 }
 
-/* User Info Row */
+.calendar-header th > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cfp-space-2);
+}
+
+/* Gear icon — target just the glyph so only the icon rotates, not the button. */
+.calendar-settings-icon {
+  background: transparent;
+  border: none;
+  color: var(--cfp-text-muted);
+  font-size: 15px;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--cfp-radius);
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--cfp-duration) var(--cfp-ease),
+    color var(--cfp-duration) var(--cfp-ease);
+}
+
+.calendar-settings-icon:hover {
+  background: var(--cfp-surface-muted);
+  color: var(--cfp-brand);
+}
+
+.calendar-settings-icon:active {
+  transform: scale(0.96);
+}
+
+.calendar-settings-icon > span {
+  display: inline-block;
+  transition: transform var(--cfp-duration-slow) var(--cfp-ease);
+}
+
+.calendar-settings-icon:hover > span {
+  transform: rotate(60deg);
+}
+
+/* ---------- User info row ---------- */
+
 .user-info-row td {
-  padding: 8px;
-  background-color: var(--accent-light);
-  color: var(--text-color);
+  padding: var(--cfp-space-3) var(--cfp-space-3) var(--cfp-space-2);
+  background: transparent;
 }
 
 .user-info {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 5px;
+  justify-content: space-between;
+  gap: var(--cfp-space-3);
 }
 
 .user-handle {
-  font-weight: bold;
-  color: var(--accent-dark);
+  font-weight: 600;
+  font-size: var(--cfp-text-md);
+  color: var(--cfp-brand);
   text-decoration: none;
+  transition: color var(--cfp-duration) var(--cfp-ease);
 }
 
-/* .user-handle:hover {
+.user-handle:hover {
+  color: var(--cfp-brand-hover);
   text-decoration: underline;
-} */
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
 
-/* Streak Container */
+.user-rating {
+  font-weight: 500;
+  font-size: var(--cfp-text-sm);
+  opacity: 0.85;
+  margin-left: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* CF rating tier accent. Applied to the handle + its sibling rating badge. */
+.user-handle.tier-newbie     { color: #909090; }
+.user-handle.tier-pupil      { color: #2d8f2d; }
+.user-handle.tier-specialist { color: #03a89e; }
+.user-handle.tier-expert     { color: #1f6feb; }
+.user-handle.tier-cm         { color: #a000a0; }
+.user-handle.tier-master     { color: #ff8c00; }
+.user-handle.tier-gm         { color: #d81b1b; }
+
+/* ---------- Streak pill ---------- */
+
 .streak-container {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 5px;
-  background-color: rgba(255, 255, 255, 0.5);
-  padding: 5px 10px;
-  border-radius: 20px;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--cfp-surface-muted);
+  border: 1px solid var(--cfp-border);
+  border-radius: var(--cfp-radius-full);
+  font-size: var(--cfp-text-sm);
+  transition: background var(--cfp-duration) var(--cfp-ease),
+    box-shadow var(--cfp-duration) var(--cfp-ease);
+}
+
+.streak-container.has-streak {
+  background: color-mix(in srgb, var(--cfp-flame) 8%, var(--cfp-surface));
+  border-color: color-mix(in srgb, var(--cfp-flame) 22%, var(--cfp-border));
+  box-shadow: 0 0 0 3px var(--cfp-flame-glow);
 }
 
 .streak-flame {
-  color: #ff9a76; /* Pastel orange for flame */
+  display: inline-block;
+  font-size: 13px;
+  line-height: 1;
+  transform-origin: center;
+}
+
+.streak-container.has-streak .streak-flame {
+  animation: cfp-flame-flicker 2.4s ease-in-out infinite;
+}
+
+.streak-container.pulse {
+  animation: cfp-streak-pulse 420ms var(--cfp-ease-spring);
 }
 
 .streak-count {
-  font-weight: bold;
-  color: #e67e7e; /* Pastel red for count */
+  font-weight: 700;
+  color: var(--cfp-text);
+  font-variant-numeric: tabular-nums;
+  min-width: 12px;
+  text-align: center;
 }
 
 .streak-label {
-  font-size: 0.8em;
-  color: var(--text-light);
+  font-size: var(--cfp-text-xs);
+  color: var(--cfp-text-muted);
+  letter-spacing: 0.01em;
 }
 
-/* Day Header */
+/* ---------- Day header (Sun-Mon-...) ---------- */
+
 .day-header th {
-  background-color: var(--accent-color);
-  color: white;
-  padding: 8px 0; /* Reduce horizontal padding */
+  padding: var(--cfp-space-2) 0;
+  font-size: var(--cfp-text-xs);
+  font-weight: 500;
   text-align: center;
-  font-size: 0.9em; /* Slightly smaller font */
+  color: var(--cfp-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: transparent;
 }
 
-/* Calendar Days */
+/* ---------- Day cells ---------- */
+
 .calendar td {
-  text-align: center;
-  padding: 8px 0; /* Vertical padding only */
-  background-color: var(--primary-color);
-  border-radius: 4px;
-  transition: all 0.3s ease;
   position: relative;
-  cursor: default; /* Default cursor for all cells */
-  font-size: 0.9em; /* Slightly smaller font */
-  height: 30px; /* Fixed height for cells */
+  text-align: center;
+  padding: 0;
+  height: var(--cfp-cell-height);
+  background: transparent;
+  color: var(--cfp-text);
+  font-size: var(--cfp-text-sm);
+  font-weight: 500;
+  border-radius: var(--cfp-radius);
+  transition: background var(--cfp-duration) var(--cfp-ease),
+    color var(--cfp-duration) var(--cfp-ease),
+    transform var(--cfp-duration) var(--cfp-ease);
+  cursor: default;
 }
 
-
-
-/* Empty cell styling */
 .calendar td:empty {
-  background-color: transparent;
-  box-shadow: none;
-  border: none;
-  pointer-events: none; /* No hover or click events */
+  pointer-events: none;
 }
 
-/* Day States */
+/* Day state tints */
 .calendar td.past {
-  background-color: #f5f5f5;
-}
-
-.calendar td.today {
-  background-color: #e3f2fd;
-  font-weight: bold;
-  box-shadow: 0 0 0 2px var(--accent-color);
+  background: var(--cfp-surface-alt);
+  color: var(--cfp-text-muted);
 }
 
 .calendar td.future {
-  color: var(--text-light);
+  color: var(--cfp-text-subtle);
 }
 
+/* Today — ring + halo. The halo is the expressive touch. */
+.calendar td.today {
+  background: var(--cfp-brand-tint);
+  color: var(--cfp-brand);
+  font-weight: 700;
+  box-shadow: 0 0 0 2px var(--cfp-brand);
+  animation: cfp-today-halo 2.6s ease-in-out infinite;
+}
+
+/* Solved — green tint + bold. Checkmark added inline from content.js. */
 .calendar td.solved {
-  background-color: #e8f5e9; /* Light green background */
+  background: var(--cfp-success-soft);
+  color: var(--cfp-success);
 }
 
-.calendar td.solved .checkmark {
-  color: var(--success-color);
-  font-weight: bold;
-  margin-left: 2px;
-  font-size: 0.9em; /* Slightly smaller checkmark */
+.calendar td.solved.today {
+  background: color-mix(in srgb, var(--cfp-success) 18%, var(--cfp-brand-tint));
+  box-shadow: 0 0 0 2px var(--cfp-success);
 }
 
-/* Links */
-.calendar td a {
-  color: var(--accent-dark);
-  text-decoration: none;
-  padding: 2px 5px;
-  border-radius: 3px;
-  transition: all 0.2s ease;
+.checkmark {
   display: inline-block;
-  cursor: pointer; /* Add pointer cursor for links */
+  margin-left: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--cfp-success);
+  transform-origin: center;
+  animation: cfp-check-draw 360ms var(--cfp-ease-spring);
+}
+
+/* ---------- Links inside cells ---------- */
+
+.calendar td a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  padding: 4px 6px;
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--cfp-radius-sm);
+  transition: background var(--cfp-duration) var(--cfp-ease),
+    transform var(--cfp-duration) var(--cfp-ease);
+}
+
+.calendar td:not(.future):not(:empty):hover {
+  background: var(--cfp-brand-soft);
+  transform: translateY(-1px);
+}
+
+.calendar td.past:hover {
+  background: var(--cfp-surface-muted);
 }
 
 .calendar td a:hover {
-  background-color: var(--accent-color);
-  color: white;
+  text-decoration: none;
 }
 
-/* Status Message */
-.cf-potd-status {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  padding: 10px 15px;
-  background-color: rgba(120, 169, 230, 0.9); /* Pastel blue with transparency */
-  color: white;
-  border-radius: var(--border-radius);
-  box-shadow: var(--shadow);
-  z-index: 9999;
-  transition: all 0.3s ease;
+/* Focus visible for keyboard navigation. */
+.calendar td a:focus-visible {
+  outline: 2px solid var(--cfp-brand);
+  outline-offset: 2px;
 }
 
-/* Popup Styles */
-.container {
-  width: 300px;
-  padding: 20px;
-  background-color: #fff;
-  border-radius: var(--border-radius);
-  box-shadow: var(--shadow);
+/* ==========================================================================
+   Keyframes
+   ========================================================================== */
+
+@keyframes cfp-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-h1 {
-  color: var(--accent-dark);
-  margin-bottom: 15px;
-  text-align: center;
+@keyframes cfp-today-halo {
+  0%, 100% { box-shadow: 0 0 0 2px var(--cfp-brand), 0 0 0 0 var(--cfp-brand-ring); }
+  50%      { box-shadow: 0 0 0 2px var(--cfp-brand), 0 0 0 6px transparent; }
 }
 
-.input-group {
-  margin-bottom: 15px;
+@keyframes cfp-flame-flicker {
+  0%, 100% { transform: scale(1) rotate(-2deg); }
+  50%      { transform: scale(1.08) rotate(3deg); }
 }
 
-.input-group input {
-  width: 100%;
-  padding: 10px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius);
-  font-size: 14px;
+@keyframes cfp-streak-pulse {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.12); }
+  100% { transform: scale(1); }
 }
 
-.button-group {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 15px;
-}
-
-.button-group button {
-  flex: 1;
-  padding: 10px;
-  background-color: var(--accent-color);
-  color: white;
-  border: none;
-  border-radius: var(--border-radius);
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.button-group button:hover {
-  background-color: var(--accent-dark);
-}
-
-.status-message {
-  margin-top: 10px;
-  padding: 8px;
-  border-radius: var(--border-radius);
-  text-align: center;
-}
-
-.error-message {
-  background-color: var(--error-color);
-  color: #d32f2f;
-}
-
-.success-message {
-  background-color: var(--success-color);
-  color: #2e7d32;
-}
-
-/* Streak UI in popup */
-#streakElement {
-  margin-top: 15px;
-}
-
-#streakElement .streak-container {
-  background-color: #f5f5f5;
-  border-radius: var(--border-radius);
-  padding: 10px 15px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-#streakElement .streak-icon {
-  font-size: 24px;
-  margin-bottom: 5px;
-}
-
-#streakElement .streak-details {
-  text-align: center;
-  margin-bottom: 8px;
-}
-
-#streakElement .streak-count {
-  font-size: 28px;
-  font-weight: bold;
-  color: #e67e7e;
-}
-
-#streakElement .streak-label {
-  font-size: 12px;
-  color: var(--text-light);
-}
-
-#streakElement .streak-progress {
-  width: 100%;
-  height: 6px;
-  background-color: #e0e0e0;
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-#streakElement .progress-bar {
-  height: 100%;
-  background-color: var(--accent-color);
-  border-radius: 3px;
-  transition: width 0.5s ease;
-}
-
-#streakElement .streak-message {
-  text-align: center;
-  color: var(--text-light);
-  padding: 10px;
+@keyframes cfp-check-draw {
+  0%   { opacity: 0; transform: scale(0.4); }
+  60%  { opacity: 1; transform: scale(1.25); }
+  100% { opacity: 1; transform: scale(1); }
 }
