@@ -34,14 +34,112 @@ async function initializeExtension() {
       // Show setup form
       showSetupForm();
     } else {
-      // Show calendar
+      // Show calendar immediately (uses cached data — fast path)
       await createCalendar();
-      
+
       // Initialize settings panel (hidden by default)
-      initializeSettingsPanel(userData);
+      await initializeSettingsPanel();
+
+      // Fire-and-forget: silently sync rating with backend.
+      // If Codeforces rating has changed since last login, this will update
+      // the stored user, refresh problems, and re-render the UI.
+      syncUserInBackground();
     }
   } catch (error) {
     window.errorHandler.logError('initializeExtension', error);
+  }
+}
+
+/**
+ * Silently sync the stored user's rating with the backend.
+ *
+ * The backend's POST /users endpoint is the single source of truth:
+ * it always fetches the latest rating from the Codeforces API and
+ * returns the synced user. This function compares that fresh rating
+ * against the one currently in chrome.storage; if it has drifted, we
+ * refresh problems for the new rating and update the UI.
+ *
+ * Runs fire-and-forget so it never blocks the calendar render. Failures
+ * are logged but do not surface as errors — the extension keeps working
+ * with cached data when the backend is unreachable.
+ */
+async function syncUserInBackground() {
+  try {
+    const userData = await window.storage.get(window.storageKeys.USER_DATA);
+    const handle = userData?.username;
+    if (!handle) {
+      return;
+    }
+
+    // Capture cached rating for drift detection
+    const oldUserInfo = await window.storage.get(window.storageKeys.USER_INFO);
+    let oldRating = null;
+    if (oldUserInfo && Array.isArray(oldUserInfo) && oldUserInfo.length > 0) {
+      const u = oldUserInfo[0][0] || oldUserInfo[0];
+      oldRating = u?.rating ?? null;
+    } else if (oldUserInfo && typeof oldUserInfo === 'object') {
+      oldRating = oldUserInfo.rating ?? null;
+    }
+
+    console.log(`[CF-POTD] Background sync: handle=${handle}, cached rating=${oldRating}`);
+
+    // Hit backend — idempotent; always syncs rating with Codeforces
+    const freshUser = await window.api.getOrCreateUser(handle);
+    const newRating = freshUser?.rating ?? null;
+
+    // Persist the freshest user record
+    await window.storage.set(window.storageKeys.USER_INFO, [freshUser]);
+
+    if (oldRating !== newRating) {
+      console.log(
+        `[CF-POTD] Rating changed: ${oldRating} -> ${newRating}. Refreshing UI...`
+      );
+
+      // Refresh monthly problems to match the new rating bucket
+      try {
+        const { month, year } = window.dateUtils.getCurrentMonthAndYear();
+        const problemsData = await window.api.getMonthlyProblems(
+          month,
+          year,
+          newRating
+        );
+        const setupForm = new window.SetupForm();
+        const formattedProblems = setupForm.formatProblems(
+          problemsData,
+          month,
+          year,
+          newRating
+        );
+        if (formattedProblems && formattedProblems.length > 0) {
+          await window.storage.set(
+            window.storageKeys.PROBLEM_DATA,
+            formattedProblems
+          );
+        }
+      } catch (err) {
+        console.warn(
+          '[CF-POTD] Problem refresh after rating change failed:',
+          err.message
+        );
+      }
+
+      // Update the open Settings panel (if any) so UI matches storage
+      if (settingsPanelInstance) {
+        settingsPanelInstance.updateUserData({
+          username: handle,
+          rating: newRating
+        });
+      }
+
+      // Re-render the calendar with new problems
+      if (window.refreshCalendar) {
+        window.refreshCalendar();
+      }
+    } else {
+      console.log(`[CF-POTD] Rating unchanged (${newRating}). No refresh needed.`);
+    }
+  } catch (err) {
+    console.warn('[CF-POTD] Background sync failed (non-critical):', err.message);
   }
 }
 
@@ -75,9 +173,8 @@ function showSetupForm() {
       await createCalendar();
       console.log('[CF-POTD] Calendar created successfully');
       
-      // Initialize settings panel
-      const userData = await window.storage.get(window.storageKeys.USER_DATA);
-      initializeSettingsPanel(userData);
+      // Initialize settings panel (reads merged USER_DATA + USER_INFO internally)
+      await initializeSettingsPanel();
       
     } catch (error) {
       console.error('[CF-POTD] Error in setup complete:', error);
@@ -91,19 +188,42 @@ function showSetupForm() {
 }
 
 /**
- * Initialize the settings panel
+ * Initialize the settings panel.
+ *
+ * Merges the "thin" USER_DATA ({username}) with the "full" USER_INFO
+ * (DB record containing rating, streak, etc.) so the panel can render
+ * the correct handle + rating. Legacy USER_INFO is stored wrapped in an
+ * array, so we unwrap it defensively.
  */
-function initializeSettingsPanel(userData) {
+async function initializeSettingsPanel() {
   console.log('[CF-POTD] Initializing settings panel...');
-  
+
   if (settingsPanelInstance) {
     settingsPanelInstance.destroy();
   }
-  
-  settingsPanelInstance = new window.SettingsPanel(userData);
+
+  const userData = await window.storage.get(window.storageKeys.USER_DATA);
+  const userInfo = await window.storage.get(window.storageKeys.USER_INFO);
+
+  let rating = null;
+  if (userInfo && Array.isArray(userInfo) && userInfo.length > 0) {
+    const user = userInfo[0][0] || userInfo[0];
+    rating = user?.rating ?? null;
+  } else if (userInfo && typeof userInfo === 'object') {
+    rating = userInfo.rating ?? null;
+  }
+
+  const mergedData = {
+    username: userData?.username || 'Unknown',
+    rating: rating
+  };
+
+  console.log('[CF-POTD] Settings panel data:', mergedData);
+
+  settingsPanelInstance = new window.SettingsPanel(mergedData);
   const panelElement = settingsPanelInstance.render();
   document.body.appendChild(panelElement);
-  
+
   console.log('[CF-POTD] Settings panel initialized');
 }
 

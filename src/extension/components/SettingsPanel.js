@@ -18,10 +18,13 @@ class SettingsPanel {
     const panel = document.createElement('div');
     panel.className = 'cf-potd-settings-panel';
     panel.style.display = 'none'; // Hidden by default
-    
+
     const username = this.userData?.username || 'Unknown';
-    const rating = this.userData?.rating || 800; // Default to 800 for new users
-    
+    // Show an em-dash for genuinely missing rating rather than defaulting
+    // to a misleading 800 (legacy behavior that caused stale-looking UI).
+    const rating =
+      this.userData?.rating != null ? this.userData.rating : '—';
+
     panel.innerHTML = `
       <div class="settings-overlay"></div>
       <div class="settings-content">
@@ -36,11 +39,11 @@ class SettingsPanel {
             <h4>User Information</h4>
             <div class="info-row">
               <span class="info-label">Handle:</span>
-              <span class="info-value">${username}</span>
+              <span id="settings-user-handle" class="info-value">${username}</span>
             </div>
             <div class="info-row">
               <span class="info-label">Rating:</span>
-              <span class="info-value">${rating}</span>
+              <span id="settings-user-rating" class="info-value">${rating}</span>
             </div>
           </div>
           
@@ -242,10 +245,12 @@ class SettingsPanel {
       await window.storage.set(window.storageKeys.USER_INFO, [updatedUser]);
       
       // Update UI
-      const ratingValue = this.container.querySelector('.info-row:nth-of-type(2) .info-value');
+      const ratingValue = this.container.querySelector('#settings-user-rating');
       if (ratingValue) {
         ratingValue.textContent = newRating;
       }
+      // Keep in-memory state in sync so future re-renders are correct
+      this.userData = { ...(this.userData || {}), rating: newRating };
       
       btn.textContent = '✅ Updated!';
       
@@ -426,14 +431,17 @@ class SettingsPanel {
    */
   updateUserData(userData) {
     this.userData = userData;
-    
+
     // Update UI if already rendered
     if (this.container) {
-      const usernameEl = this.container.querySelector('.info-value:first-child');
-      const ratingEl = this.container.querySelector('.info-value:last-child');
-      
+      const usernameEl = this.container.querySelector('#settings-user-handle');
+      const ratingEl = this.container.querySelector('#settings-user-rating');
+
       if (usernameEl) usernameEl.textContent = userData?.username || 'Unknown';
-      if (ratingEl) ratingEl.textContent = userData?.rating || 'N/A';
+      if (ratingEl) {
+        ratingEl.textContent =
+          userData?.rating != null ? userData.rating : '—';
+      }
     }
   }
 
