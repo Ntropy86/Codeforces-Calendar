@@ -1,6 +1,72 @@
 // Background service worker for the Codeforces POTD extension
 
-// Listen for messages from the popup
+/**
+ * Handle extension icon click
+ * Opens settings if on Codeforces page, or navigates to Codeforces
+ */
+chrome.action.onClicked.addListener(async (tab) => {
+  console.log("[Background] Extension icon clicked");
+  
+  try {
+    // Check if we're on a Codeforces page
+    if (tab.url && tab.url.includes("codeforces.com")) {
+      // Open settings panel
+      chrome.tabs.sendMessage(tab.id, { action: "openSettings" });
+    } else {
+      // Navigate to Codeforces
+      chrome.tabs.create({ url: "https://codeforces.com" });
+    }
+  } catch (error) {
+    console.error("[Background] Error handling icon click:", error);
+  }
+});
+
+/**
+ * Update extension badge with streak count
+ */
+async function updateExtensionBadge() {
+  try {
+    const result = await chrome.storage.local.get(['userInfo']);
+    
+    if (result.userInfo && Array.isArray(result.userInfo) && result.userInfo.length > 0) {
+      const user = result.userInfo[0][0] || result.userInfo[0];
+      const streakCount = user?.streak?.last_streak_count || 0;
+      
+      // Set badge text
+      chrome.action.setBadgeText({ text: streakCount > 0 ? String(streakCount) : '' });
+      
+      // Set badge color (gradient not possible, use solid color)
+      chrome.action.setBadgeBackgroundColor({ color: '#667eea' });
+      
+      // Set title for tooltip
+      chrome.action.setTitle({ 
+        title: streakCount > 0 
+          ? `🔥 ${streakCount} day streak! Click to open settings` 
+          : 'Codeforces POTD - Click to setup or open settings'
+      });
+      
+      console.log("[Background] Badge updated: streak =", streakCount);
+    } else {
+      // No user data, clear badge
+      chrome.action.setBadgeText({ text: '' });
+      chrome.action.setTitle({ title: 'Codeforces POTD - Click to setup' });
+    }
+  } catch (error) {
+    console.error("[Background] Error updating badge:", error);
+  }
+}
+
+// Update badge on startup
+updateExtensionBadge();
+
+// Update badge when storage changes
+chrome.storage.onChanged.addListener((changes, namespace) => {
+  if (namespace === 'local' && (changes.userInfo || changes.userData)) {
+    updateExtensionBadge();
+  }
+});
+
+// Listen for messages from content scripts
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
   console.log("Background received message:", request);
   

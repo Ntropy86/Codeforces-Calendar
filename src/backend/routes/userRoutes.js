@@ -51,4 +51,11 @@ router.put('/cleanup-streak-days', userController.cleanupOldStreakDays);
  */
 router.put('/streak-date', userController.updateUserStreakDate);
 
+/**
+ * @route POST /users/refresh-rating
+ * @desc Refresh user rating from Codeforces API
+ * @access Public
+ */
+router.post('/refresh-rating', userController.refreshUserRating);
+
 module.exports = router;

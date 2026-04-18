@@ -34,9 +34,11 @@ services:
       # Load environment from .env.development file
       - ./src/backend/.env.development
     volumes:
-      # Mount source code for hot-reload during development
-      - ./src/backend:/app
-      - /app/node_modules
+      # Mount source code for hot-reload during development.
+      # Path must match the Dockerfile's WORKDIR (/usr/src/app) so that
+      # nodemon watches the same files Node is actually executing.
+      - ./src/backend:/usr/src/app
+      - /usr/src/app/node_modules
     depends_on:
       mongo:
         condition: service_healthy

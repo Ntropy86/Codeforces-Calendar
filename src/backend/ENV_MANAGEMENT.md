@@ -1,4 +1,4 @@
-# Environment Configuration Management
+git # Environment Configuration Management
 
 ## Overview
 
@@ -225,4 +225,5 @@ ln -sf .env.development .env
 ---
 
 **Key Takeaway:** No more commenting/uncommenting! Each environment has its own file. Just switch the symlink or copy the file you need. 🎯
+
 

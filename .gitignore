@@ -11,7 +11,7 @@ npm-debug.log
 .env.*
 !.env.example
 .passport.js
-.DS_Store
+**/.DS_Store
 
 # Extension configuration (contains API endpoints)
 /src/extension/config.json
@@ -22,3 +22,5 @@ dist/
 /src/backend/plan.txt
 cronjobs.md
 optimizations.md
+
+docs/

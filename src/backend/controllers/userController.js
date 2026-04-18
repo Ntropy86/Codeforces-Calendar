@@ -39,34 +39,29 @@ const getUser = async (req, res) => {
 const createUser = async (req, res) => {
     try {
         const userID = req.body.userID;
-        
+
         if (!userID) {
             return res.status(400).json("UserID is required");
         }
-        
-        console.log("User ID:", userID, req.body);
-        
-        try {
-            const user = await userService.findUserByID(userID);
-            
-            if (user.length !== 0) {
-                console.log("User already exists", user);
-                return res.status(200).json({ "message": "User already exists", user });
-            }
-            
-            const newUser = await userService.createUser(userID);
-            console.log("New User is created", newUser);
-            
-            res.status(200).json({ "message": newUser });
-        } catch (error) {
-            if (error.message === "User already exists") {
-                return res.status(200).json({ "message": error.message });
-            }
-            throw error;
-        }
+
+        console.log("[createUser] Received userID:", userID);
+
+        // Single entry point for login/signup.
+        // Always syncs rating with Codeforces API as source of truth.
+        const user = await userService.getOrCreateUser(userID);
+
+        console.log("[createUser] User synced:", {
+            userID: user.userID,
+            rating: user.rating
+        });
+
+        res.status(200).json({ "message": user });
     } catch (err) {
-        console.error("Error in createUser:", err);
-        res.status(500).json({ "message": err.message || "Internal server error" });
+        console.error("[createUser] Error:", err);
+        const statusCode = err.statusCode || 500;
+        res.status(statusCode).json({
+            "message": err.message || "Internal server error"
+        });
     }
 };
 
@@ -220,6 +215,30 @@ const updateUserStreakDate = async (req, res) => {
     }
 };
 
+/**
+ * Refresh user rating from Codeforces API
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>}
+ */
+const refreshUserRating = async (req, res) => {
+    try {
+        const userID = req.body.userID;
+        
+        if (!userID) {
+            return res.status(400).json("UserID is required");
+        }
+        
+        const updatedUser = await userService.refreshUserRating(userID);
+        console.log("User Rating Refreshed", updatedUser);
+        
+        res.status(200).json({ "message": updatedUser });
+    } catch (err) {
+        console.error("Error in refreshUserRating:", err);
+        res.status(500).json({ "message": err.message || "Internal server error" });
+    }
+};
+
 module.exports = {
     getUser,
     createUser,
@@ -227,5 +246,6 @@ module.exports = {
     updateUserStreakDay,
     resetUserStreakDays,
     cleanupOldStreakDays,
-    updateUserStreakDate
+    updateUserStreakDate,
+    refreshUserRating
 };

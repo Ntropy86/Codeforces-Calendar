@@ -259,6 +259,121 @@ const cleanupOldStreakDays = async (userID) => {
 };
 
 /**
+ * Get or create a user, always syncing rating with Codeforces API.
+ *
+ * Codeforces is treated as the source of truth. If the user exists in our DB
+ * but their rating differs from the Codeforces API, the DB rating is updated.
+ *
+ * This is the single entry point for the `POST /users` endpoint and replaces
+ * the previous behavior where existing users were returned with stale ratings.
+ *
+ * @param {string} userID - The Codeforces user handle (case-insensitive)
+ * @returns {Promise<Object>} - Promise resolving to the user document
+ * @throws {Error} - If Codeforces API fails or handle is invalid
+ */
+const getOrCreateUser = async (userID) => {
+    // 1. Fetch from Codeforces API (source of truth)
+    const CF_User_API_URL = `https://codeforces.com/api/user.info?handles=${userID}`;
+    const response = await fetch(CF_User_API_URL);
+    const data = await response.json();
+
+    if (data.status !== "OK") {
+        const err = new Error(data.comment || "Invalid Codeforces handle");
+        err.statusCode = 400;
+        throw err;
+    }
+
+    const cfUser = data.result[0];
+    const cfHandle = cfUser.handle; // canonical casing from CF
+    const cfRating = cfUser.rating || 800; // unrated users default to 800
+
+    // 2. Look up existing user (case-insensitive match on CF canonical handle)
+    const existingUser = await User.findOne({
+        userID: { $regex: `^${cfHandle}$`, $options: "i" }
+    });
+
+    if (existingUser) {
+        // 3a. Exists — sync rating if it drifted
+        if (existingUser.rating !== cfRating) {
+            console.log(
+                `[getOrCreateUser] Syncing rating for ${cfHandle}: ${existingUser.rating} -> ${cfRating}`
+            );
+            existingUser.rating = cfRating;
+            await existingUser.save();
+        } else {
+            console.log(
+                `[getOrCreateUser] User ${cfHandle} rating unchanged: ${cfRating}`
+            );
+        }
+        return existingUser;
+    }
+
+    // 3b. Doesn't exist — create with fresh CF data
+    console.log(
+        `[getOrCreateUser] Creating new user: ${cfHandle} (rating: ${cfRating})`
+    );
+
+    const streak_days = {};
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth() + 1;
+    const daysInMonth = new Date(year, month, 0).getDate();
+    for (let day = 1; day <= daysInMonth; day++) {
+        streak_days[`${year}-${month}-${day}`] = false;
+    }
+
+    const newUser = new User({
+        userID: cfHandle,
+        rating: cfRating,
+        streak: {
+            last_streak_date: null,
+            last_streak_count: 0,
+            streak_days: streak_days
+        }
+    });
+
+    return await newUser.save();
+};
+
+/**
+ * Refresh user rating from Codeforces API
+ * @param {string} userID - The user ID
+ * @returns {Promise} - Promise resolving to updated user
+ */
+const refreshUserRating = async (userID) => {
+    try {
+        // Fetch user data from Codeforces API
+        const CF_User_API_URL = `https://codeforces.com/api/user.info?handles=${userID}`;
+        const response = await fetch(CF_User_API_URL);
+        const data = await response.json();
+        
+        if (data.status !== "OK") {
+            throw new Error("Failed to fetch user data from Codeforces API");
+        }
+        
+        const user = data.result[0];
+        const userRating = user.rating || 800; // Default to 800 if no rating
+        
+        // Update user rating in database
+        const updatedUser = await User.findOneAndUpdate(
+            { userID: userID },
+            { $set: { rating: userRating } },
+            { new: true }
+        );
+        
+        if(updatedUser === null) {
+            throw new Error("User not found");
+        }
+        
+        console.log(`Rating refreshed for ${userID}: ${userRating}`);
+        return updatedUser;
+    } catch (error) {
+        console.error("Error refreshing user rating:", error);
+        throw error;
+    }
+};
+
+/**
  * Update user based on the attribute sent in the request body
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
@@ -304,8 +419,10 @@ const updateUser = async (req, res) => {
 module.exports = {
     findUserByID,
     createUser,
+    getOrCreateUser,
     updateUserStreak,
     updateUserStreakDay,
     resetUserStreakDays,
-    cleanupOldStreakDays
+    cleanupOldStreakDays,
+    refreshUserRating
 };

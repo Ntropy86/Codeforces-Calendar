@@ -14,9 +14,7 @@
     "http://localhost:*/*",
     "https://*.yourdomain.com/*"
   ],
-  "action": {
-    "default_popup": "popup.html"
-  },
+  "action": {},
   "icons": {
     "16": "icon.png",
     "48": "icon.png",
@@ -29,8 +27,16 @@
   "content_scripts": [
     {
       "matches": ["https://codeforces.com/*"],
-      "js": ["config.js", "storage.js", "api.js", "streak.js", "content.js"],
-      "css": ["style.css"]
+      "js": [
+        "config.js",
+        "storage.js",
+        "api.js",
+        "streak.js",
+        "components/SetupForm.js",
+        "components/SettingsPanel.js",
+        "content.js"
+      ],
+      "css": ["style.css", "components/components.css"]
     }
   ],
   "web_accessible_resources": [

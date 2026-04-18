@@ -1,11 +1,151 @@
 /**
  * Main content script for Codeforces POTD extension
+ * Calendar-only architecture: No popup, everything inline
  */
 
 // Track if calendar is already being refreshed to prevent loops
 // Use window property instead of local variable to avoid redeclaration errors
 if (typeof window.cfPotdIsRefreshing === 'undefined') {
   window.cfPotdIsRefreshing = false;
+}
+
+// Global settings panel instance
+let settingsPanelInstance = null;
+
+/**
+ * Initialize the extension
+ * Check if user exists, show setup form or calendar accordingly
+ */
+async function initializeExtension() {
+  console.log('[CF-POTD] Initializing extension...');
+  
+  try {
+    // Check if user data exists
+    const userData = await window.storage.get(window.storageKeys.USER_DATA);
+    const userInfo = await window.storage.get(window.storageKeys.USER_INFO);
+    const problemData = await window.storage.get(window.storageKeys.PROBLEM_DATA);
+    
+    const hasUser = userData && userData.username;
+    const hasData = userInfo && problemData;
+    
+    console.log('[CF-POTD] User exists:', hasUser, 'Has data:', hasData);
+    
+    if (!hasUser || !hasData) {
+      // Show setup form
+      showSetupForm();
+    } else {
+      // Show calendar
+      await createCalendar();
+      
+      // Initialize settings panel (hidden by default)
+      initializeSettingsPanel(userData);
+    }
+  } catch (error) {
+    window.errorHandler.logError('initializeExtension', error);
+  }
+}
+
+/**
+ * Show the setup form for first-time users
+ */
+function showSetupForm() {
+  console.log('[CF-POTD] Showing setup form...');
+  
+  const sidebar = document.getElementById('sidebar');
+  if (!sidebar) {
+    console.error('[CF-POTD] Sidebar not found, cannot show setup form');
+    return;
+  }
+  
+  // Create setup form instance
+  const setupForm = new window.SetupForm();
+  
+  // Override the onSetupComplete callback
+  setupForm.onSetupComplete = async () => {
+    console.log('[CF-POTD] Setup complete, loading calendar...');
+    
+    try {
+      // Destroy setup form first
+      setupForm.destroy();
+      
+      // Small delay to ensure DOM is ready
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Create calendar
+      await createCalendar();
+      console.log('[CF-POTD] Calendar created successfully');
+      
+      // Initialize settings panel
+      const userData = await window.storage.get(window.storageKeys.USER_DATA);
+      initializeSettingsPanel(userData);
+      
+    } catch (error) {
+      console.error('[CF-POTD] Error in setup complete:', error);
+      alert('Error loading calendar. Please refresh the page.');
+    }
+  };
+  
+  // Render and insert the form
+  const formElement = setupForm.render();
+  sidebar.insertAdjacentElement('afterbegin', formElement);
+}
+
+/**
+ * Initialize the settings panel
+ */
+function initializeSettingsPanel(userData) {
+  console.log('[CF-POTD] Initializing settings panel...');
+  
+  if (settingsPanelInstance) {
+    settingsPanelInstance.destroy();
+  }
+  
+  settingsPanelInstance = new window.SettingsPanel(userData);
+  const panelElement = settingsPanelInstance.render();
+  document.body.appendChild(panelElement);
+  
+  console.log('[CF-POTD] Settings panel initialized');
+}
+
+/**
+ * Add settings gear icon to calendar header
+ */
+function addSettingsIcon() {
+  const calendarHeader = document.querySelector('.calendar-header th');
+  if (!calendarHeader) {
+    console.warn('[CF-POTD] Calendar header not found');
+    return;
+  }
+  
+  // Check if icon already exists
+  if (calendarHeader.querySelector('.calendar-settings-icon')) {
+    return;
+  }
+  
+  // Create settings icon button
+  const settingsBtn = document.createElement('button');
+  settingsBtn.className = 'calendar-settings-icon';
+  settingsBtn.innerHTML = '⚙️';
+  settingsBtn.title = 'Settings';
+  settingsBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (settingsPanelInstance) {
+      settingsPanelInstance.open();
+    }
+  });
+  
+  // Wrap header content
+  const headerText = calendarHeader.innerHTML;
+  calendarHeader.innerHTML = `
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <span>${headerText}</span>
+      <span style="margin-left: auto;"></span>
+    </div>
+  `;
+  
+  const rightSection = calendarHeader.querySelector('span:last-child');
+  rightSection.appendChild(settingsBtn);
 }
 
 // Define createCalendar function first before it's referenced
@@ -270,6 +410,9 @@ async function createCalendar() {
       }
       sidebar.insertAdjacentHTML("afterbegin", calendarHTML);
       console.log("createCalendar: Calendar injected successfully.");
+      
+      // Add settings icon to calendar header
+      addSettingsIcon();
     } else {
       console.error("createCalendar: Sidebar element not found.");
     }
@@ -503,14 +646,35 @@ function updateStreakUI(streak) {
 }
 
 // Initialize on load
-console.log("DOMContentLoaded: Initializing calendar and submit listeners.");
+console.log("[CF-POTD] Content script loaded");
 
 // Check if we're on a Codeforces page
 if (window.location.href.includes("codeforces.com")) {
   // Wait for page to fully load
   if (document.readyState === "complete") {
-    createCalendar();
+    initializeExtension();
   } else {
-    window.addEventListener("load", createCalendar);
+    window.addEventListener("load", initializeExtension);
   }
 }
+
+// Listen for messages from background script (for legacy support)
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  console.log("[CF-POTD] Message received:", request);
+  
+  if (request.action === "injectCalendarHTML") {
+    // Legacy: refresh calendar
+    if (window.refreshCalendar) {
+      window.refreshCalendar();
+    }
+    sendResponse({ success: true });
+  } else if (request.action === "openSettings") {
+    // Open settings panel from extension icon click
+    if (settingsPanelInstance) {
+      settingsPanelInstance.open();
+    }
+    sendResponse({ success: true });
+  }
+  
+  return true; // Keep message channel open for async response
+});
