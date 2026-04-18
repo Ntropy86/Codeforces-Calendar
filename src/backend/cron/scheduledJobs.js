@@ -1,19 +1,16 @@
 /**
  * V3 in-process cron. Opt-in via ENABLE_CRON=true in the environment.
  *
- * In production the preferred trigger is GCP Cloud Scheduler hitting the
- * same handlers via /test/cron (with shared-secret auth). This module is
- * provided so local development and single-node self-hosted deployments
- * still get daily refreshes without an external scheduler.
- *
- * Note: "daily problem for rating X on date Y" is NOT a scheduled job in
- * V3 — it's derived on read (see lib/dailyProblem.js). The only things
- * we schedule are data-freshness tasks:
+ * "Daily problem for rating X on date Y" is NOT a scheduled job in V3 —
+ * it's derived on read (see lib/dailyProblem.js). The only things we
+ * schedule are data-freshness tasks:
  *
  *   1. Weekly: pull new CF problems into the pool. If skipped, nothing
  *      breaks — users continue to get problems from the existing pool.
  *   2. Weekly: prune submissions older than 90 days to keep the
  *      collection small.
+ *
+ * Jobs are idempotent, so a missed tick just merges into the next one.
  */
 const cron = require("node-cron");
 const problemService = require("../services/problemService");

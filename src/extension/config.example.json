@@ -15,9 +15,7 @@
     }
   },
   "features": {
-    "enableDebugLogs": true,
-    "enableAnimations": true,
-    "enableDarkMode": true
+    "enableDebugLogs": true
   }
 }
 

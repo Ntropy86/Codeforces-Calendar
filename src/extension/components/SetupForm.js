@@ -112,10 +112,12 @@ class SetupForm {
     el.style.display = "block";
   }
 
-  /** Overridden by content.js to hand off to createCalendar(). */
-  onSetupComplete() {
-    if (window.createCalendar) window.createCalendar();
-  }
+  /**
+   * Overridden by content.js (showSetupForm) to hand off to createCalendar()
+   * and mount the settings panel. Default is a no-op — the form should never
+   * be rendered without that wiring.
+   */
+  onSetupComplete() {}
 
   destroy() {
     this.container?.parentNode?.removeChild(this.container);

@@ -2,9 +2,10 @@
  * Manual triggers for the V3 cron jobs.
  *
  * Mounted at `/test/cron` and gated on NODE_ENV !== "production" in app.js.
- * In production these are triggered externally (GCP Cloud Scheduler →
- * HTTPS webhook to these same handler functions behind shared-secret auth;
- * we keep the paths identical so prod & dev have the same contract).
+ * In production the same work runs inside the API process via
+ * cron/scheduledJobs.js (opt-in with ENABLE_CRON=true). If we ever need an
+ * external scheduler (e.g. GCP Cloud Scheduler) we'll surface these routes
+ * behind shared-secret auth rather than reopening them to the public.
  */
 const express = require("express");
 const problemService = require("../services/problemService");

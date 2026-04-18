@@ -103,4 +103,37 @@ describe("problemService.getProblemsInRange", () => {
       /Invalid date range/
     );
   });
+
+  it("admits a mid-range problem into later weeks but not earlier ones", async () => {
+    // Week 1: 2026-04-13..04-19 (Mon..Sun). Week 2: 2026-04-20..04-26.
+    // Seed one problem well before the range, and one added in week 1 —
+    // the late one must be invisible to week 1 but live in week 2 (regression
+    // test for the pool-filter bug where the range used the earliest week's
+    // snapshot for every day and silently hid mid-range additions).
+    await Problem.insertMany([
+      {
+        cfId: "OLD",
+        contestId: 1,
+        index: "A",
+        name: "old",
+        rating: 1200,
+        addedAt: new Date("2026-01-01T00:00:00Z")
+      },
+      {
+        cfId: "MIDWEEK",
+        contestId: 2,
+        index: "B",
+        name: "mid",
+        rating: 1200,
+        addedAt: new Date("2026-04-15T00:00:00Z")
+      }
+    ]);
+
+    const rows = await getProblemsInRange(1200, "2026-04-13", "2026-04-26");
+    const week1 = rows.slice(0, 7).map((r) => r.problem?.cfId);
+    const week2 = rows.slice(7).map((r) => r.problem?.cfId);
+
+    expect(week1).not.toContain("MIDWEEK");
+    expect(week2).toContain("MIDWEEK");
+  });
 });

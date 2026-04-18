@@ -26,8 +26,7 @@ async function fetchWithRetry(url, options = {}, {
         const body = await res.json().catch(() => ({}));
         const err = new Error(body.error || `HTTP ${res.status}`);
         err.statusCode = res.status;
-        // Don't retry 4xx — they won't succeed on retry.
-        if (res.status >= 400 && res.status < 500) throw err;
+        // 4xx won't succeed on retry — the loop below bails via `isClientErr`.
         throw err;
       }
       return await res.json();

@@ -15,10 +15,16 @@ function toISODate(date) {
   return `${y}-${m}-${day}`;
 }
 
-/** Parse "YYYY-MM-DD" into a UTC midnight Date. Throws on malformed input. */
+/**
+ * Parse "YYYY-MM-DD" into a UTC midnight Date. Throws a 400-tagged error
+ * on malformed input so controllers surface bad client dates as HTTP 400
+ * instead of an opaque 500.
+ */
 function fromISODate(iso) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
-    throw new Error(`Invalid ISO date: ${iso}`);
+    const err = new Error(`Invalid ISO date: ${iso}`);
+    err.statusCode = 400;
+    throw err;
   }
   const [y, m, d] = iso.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, d));

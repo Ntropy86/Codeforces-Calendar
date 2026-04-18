@@ -19,9 +19,7 @@ const FALLBACK_CONFIG = {
     production: { url: "" }
   },
   features: {
-    enableDebugLogs: false,
-    enableAnimations: true,
-    enableDarkMode: true
+    enableDebugLogs: false
   }
 };
 
@@ -83,50 +81,19 @@ window.storageKeys = {
 /** Minimum gap between background user syncs. Ratings change rarely. */
 window.SYNC_THROTTLE_MS = 6 * 60 * 60 * 1000; // 6 hours
 
-window.errorHandler = {
-  logError(context, error) {
-    console.error(`[${context}]`, error);
-    return error;
-  },
-  displayError(message, element) {
-    if (element) {
-      element.textContent = message;
-      element.className = "status-message error-message";
-    }
-    console.error(message);
-  }
-};
-
 /**
  * Date helpers — all in UTC to avoid drift when users travel across
- * timezones. "Today" is defined as the UTC calendar date.
+ * timezones. "Today" is defined as the UTC calendar date so it lines up
+ * with how the backend (see lib/dates.js) keys submissions.
  */
 window.dateUtils = {
   getTodayISO() {
     return this.formatDateToUTCISO(new Date());
-  },
-  getYesterdayISO() {
-    const y = new Date();
-    y.setUTCDate(y.getUTCDate() - 1);
-    return this.formatDateToUTCISO(y);
   },
   formatDateToUTCISO(date) {
     const y = date.getUTCFullYear();
     const m = (date.getUTCMonth() + 1).toString().padStart(2, "0");
     const d = date.getUTCDate().toString().padStart(2, "0");
     return `${y}-${m}-${d}`;
-  },
-  formatDateToISO(date) {
-    const y = date.getFullYear();
-    const m = (date.getMonth() + 1).toString().padStart(2, "0");
-    const d = date.getDate().toString().padStart(2, "0");
-    return `${y}-${m}-${d}`;
-  },
-  getCurrentMonthAndYear() {
-    const today = new Date();
-    return {
-      month: today.getUTCMonth() + 1,
-      year: today.getUTCFullYear()
-    };
   }
 };

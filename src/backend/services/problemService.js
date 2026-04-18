@@ -111,10 +111,14 @@ async function getProblemsInRange(rating, fromISO, toISO) {
   }
   const bucket = snapRating(rating);
 
-  // Fetch the pool once, covering the widest week any date in the range can see.
-  const widestWeekStart = startOfISOWeek(fromISO);
+  // Fetch once, using the LAST week's start as the `addedAt` ceiling so every
+  // week in the range has access to every problem it could legitimately see.
+  // `dailyProblem` re-filters per-week internally, so a looser upper bound
+  // here is safe — a tighter one would silently hide problems added mid-range
+  // from later weeks and break the same-problem-for-same-rating invariant.
+  const lastWeekStart = startOfISOWeek(toISO);
   const pool = await Problem.find(
-    { rating: bucket, addedAt: { $lte: new Date(widestWeekStart + "T00:00:00Z") } },
+    { rating: bucket, addedAt: { $lte: new Date(lastWeekStart + "T00:00:00Z") } },
     { cfId: 1, rating: 1, addedAt: 1, contestId: 1, index: 1, name: 1, tags: 1 }
   ).lean();
 

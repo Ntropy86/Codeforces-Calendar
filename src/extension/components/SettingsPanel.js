@@ -12,19 +12,19 @@
 /**
  * Theme helpers.
  *
- * Resolution order (matches the CSS cascade):
- *   1. user has explicitly forced light → `cf-potd-light-mode` on <html>
- *   2. user has explicitly forced dark  → `cf-potd-dark-mode` on <html>
- *   3. otherwise follow the system preference (CSS handles this via media)
+ * Resolution order (matches content.js:applyTheme):
+ *   1. user's stored override wins (`themeOverride` = "dark" | "light")
+ *   2. otherwise we match the Codeforces page itself (luminance-sniffed in
+ *      content.js so the calendar never looks orphaned next to CF)
  *
- * When the user checks the Dark-mode toggle we apply an explicit override.
- * Unchecking reverts to system-follows-auto. The preference is persisted.
+ * Toggling the Dark-mode checkbox writes an explicit override; there's no
+ * "system auto" path because users found it confusing when their OS theme
+ * didn't match what Codeforces was showing.
  */
 function isDarkActive() {
   const html = document.documentElement;
   if (html.classList.contains("cf-potd-dark-mode")) return true;
   if (html.classList.contains("cf-potd-light-mode")) return false;
-  // No explicit override: fall back to whatever Codeforces itself is showing.
   return window.detectCodeforcesTheme?.() === "dark";
 }
 

@@ -1,56 +1,65 @@
 # Scheduled Jobs (Backend)
 
-All background automation for the Codeforces POTD project lives on the backend.
-The extension no longer runs periodic alarms — it reconciles with the backend
-on every page load (see `syncUserInBackground` in `content.js`).
+All background automation for the Codeforces POTD project lives on the
+backend. The extension never runs its own timers — it reconciles with the
+backend on every page load (`syncWithBackend` in `src/extension/content.js`),
+throttled by `SYNC_THROTTLE_MS`.
 
-## Backend Cron Jobs
+## Design Shift in V3
 
-Scheduled with `node-cron` in `src/backend/cron/scheduledJobs.js`, timezone is
-`Asia/Kolkata`. Cron only runs when `ENABLE_CRON=true` in the loaded `.env`.
+The day's problem is **not** produced by a scheduled job anymore. It's a
+pure function of `(rating, date, problemPool)` computed on read — see
+`src/backend/lib/dailyProblem.js`. That means:
 
-| Job                             | Schedule (IST)          | Description                                                                                  |
-| ------------------------------- | ----------------------- | -------------------------------------------------------------------------------------------- |
-| `update-global-problem-set`     | Daily at 05:11          | Pulls new problems from the Codeforces API and appends them to `GlobalProblemSet`.           |
-| `generate-filtered-problem-sets`| Daily at 05:17          | Populates per-rating daily problems in `FilteredProblemSet`; pre-fills next month from day 28. |
-| `cleanup-old-streak-days`       | Weekly, Sunday 06:07    | Trims `User.streak.streak_days` entries older than 3 months to keep user docs compact.       |
+- Two users at the same rating, on the same UTC day, always get the same
+  problem. No "generate the feed at 05:00" race, no per-rating batch to
+  backfill.
+- A missed cron tick can't break today's feed. The worst thing a skipped
+  run causes is a slightly stale pool until the next refresh lands.
 
-Day-to-day problem rotation relies on `update-global-problem-set` running
-before `generate-filtered-problem-sets` on the same morning, which is why they
-are staggered by a few minutes.
+So the only cron tasks that remain are **data-freshness** chores.
+
+## Jobs
+
+Registered by `src/backend/cron/scheduledJobs.js`, opt-in via
+`ENABLE_CRON=true` in the loaded `.env`. Timezone defaults to UTC and can
+be overridden with `CRON_TIMEZONE`.
+
+| Job                       | Schedule (UTC)        | Purpose                                                                 |
+| ------------------------- | --------------------- | ----------------------------------------------------------------------- |
+| `refresh-global-problems` | Sunday 05:11          | Pull new problems from the CF problemset API into the `problems` pool.  |
+| `prune-submissions`       | Sunday 06:07          | Delete `submissions` docs older than 90 days to keep the collection small. |
+
+Weekly is deliberate. The selector freezes each rating bucket's candidate
+pool at the start of its ISO week, so any problem added during the week
+wouldn't be eligible until the next Monday anyway — there's nothing a
+more frequent refresh would buy.
 
 ## Manual Triggers (dev only)
 
-Available when `NODE_ENV !== "production"`. All routes are mounted at
-`/test/cron` and return the same `{ success, stats }` shape the scheduler logs.
+Routes are mounted at `/test/cron` and gated on `NODE_ENV !== "production"`
+in `src/backend/app.js`. They return `{ success, stats }` exactly like
+the scheduler does — handy for smoke tests and migrations.
 
-| Route                                           | Method | Description                                                      |
-| ----------------------------------------------- | ------ | ---------------------------------------------------------------- |
-| `/test/cron/update-global-problem-set`          | POST   | Run the global problem-set update immediately.                   |
-| `/test/cron/generate-filtered-problem-sets`     | POST   | Run the filtered problem-set generation immediately.             |
-| `/test/cron/cleanup-streak-data`                | POST   | Run streak cleanup (optional `userID` body param for one user).  |
+| Route                              | Method | What it does                                                 |
+| ---------------------------------- | ------ | ------------------------------------------------------------ |
+| `/test/cron/refresh-global-problems` | POST   | Pull the latest CF problems into the pool right now.         |
+| `/test/cron/prune-submissions`       | POST   | Prune old submissions (body can override `cutoffISO`).       |
 
 ```bash
-curl -X POST http://localhost:4000/test/cron/update-global-problem-set
-curl -X POST http://localhost:4000/test/cron/generate-filtered-problem-sets
-curl -X POST http://localhost:4000/test/cron/cleanup-streak-data
+curl -X POST http://localhost:4000/test/cron/refresh-global-problems
+curl -X POST http://localhost:4000/test/cron/prune-submissions
 ```
 
 ## Operational Notes
 
-- **Timezone**: schedules assume IST. If you deploy to a region with a different
-  wall-clock, adjust `TIMEZONE` in `scheduledJobs.js` or migrate the schedule
-  to an external scheduler (see "Future Direction").
-- **Failures are local**: a single failed job logs the error and the scheduler
-  keeps running. There is no retry queue — the next day's run will catch up
-  because jobs are idempotent.
-- **Problem rotation is daily**: `generate-filtered-problem-sets` only adds
-  problems for days that haven't been assigned yet, so re-running it on the
-  same day is a no-op (safe to trigger manually).
-
-## Future Direction
-
-In-process `node-cron` works for the current single-instance deployment but
-has two weaknesses: it scales down to zero instances poorly (no triggers fire),
-and the schedule is coupled to the API runtime. We're evaluating moving the
-jobs out of the process — see the team discussion for the full options list.
+- **Idempotent**: both jobs are safe to run repeatedly. `refresh-global-problems`
+  inserts only new `cfId`s and patches ratings on existing docs;
+  `prune-submissions` is a bounded `deleteMany`.
+- **Failure is local**: a throw inside a job is logged and the scheduler
+  keeps running. There's no retry queue.
+- **Single-instance**: `node-cron` runs in-process, so multi-instance
+  deployments would double-schedule. If you ever scale horizontally, move
+  these two jobs to an external scheduler (GCP Cloud Scheduler, k8s
+  CronJob, etc.) and hit the same `/test/cron/*` handlers behind a
+  shared-secret header.
