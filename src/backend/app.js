@@ -6,10 +6,6 @@ const cors = require("cors");
 
 const app = express();
 
-// CORS is driven by CORS_ORIGIN env var (falls back to "*" only for local dev).
-// Example values:
-//   development: "*"
-//   production:  "chrome-extension://kdpcekneldcnkajbmabmfgdpcdjdmcfd"
 const corsOrigin = process.env.CORS_ORIGIN || "*";
 app.use(cors({
   origin: corsOrigin,
@@ -20,23 +16,20 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Core routes
+// V3 API surface
 app.use("/users", require("./routes/userRoutes"));
-app.use("/problemset", require("./routes/globalProblemSetRoutes"));
-app.use("/problemset", require("./routes/filteredProblemSetRoutes"));
+app.use("/problems", require("./routes/problemRoutes"));
+app.use("/submissions", require("./routes/submissionRoutes"));
 
-// Test / cron-trigger routes are only exposed outside of production so they
-// can never be invoked against a live deployment.
+// Dev-only utility routes (cron triggers, health probes).
 if (process.env.NODE_ENV !== "production") {
   app.use("/test", require("./routes/testRoutes"));
   app.use("/test/cron", require("./routes/testCronRoutes"));
 }
 
-// Health check
 app.get("/welcome", (_req, res) => res.status(200).send("Welcome 🙌"));
 
-// Scheduled jobs (only when explicitly enabled — lets tests/one-off scripts
-// run the app without triggering cron).
+// In-process cron is opt-in. GCP Cloud Scheduler hits /test/cron in production.
 if (process.env.ENABLE_CRON === "true") {
   require("./cron/scheduledJobs");
 }

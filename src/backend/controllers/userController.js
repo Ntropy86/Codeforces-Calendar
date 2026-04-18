@@ -1,148 +1,63 @@
-const mongoose = require("mongoose");
 const userService = require("../services/userService");
-const Models = require("../models/models");
-
-const User = mongoose.model("User", Models.userSchema);
-
-const sendError = (res, err, fallback = "Internal server error") => {
-  console.error(err);
-  const status = err.statusCode || 500;
-  res.status(status).json({ message: err.message || fallback });
-};
-
-/**
- * GET /users?userID=handle
- * Lookup-only; does not touch the Codeforces API.
- */
-const getUser = async (req, res) => {
-  try {
-    const userID = req.query.userID || req.body.userID;
-    if (!userID) return res.status(400).json("UserID is required");
-
-    const user = await userService.findUserByID(userID);
-    if (user.length === 0) return res.status(404).json("User not found");
-
-    res.status(200).json({ message: user });
-  } catch (err) {
-    sendError(res, err);
-  }
-};
+const streakService = require("../services/streakService");
+const problemService = require("../services/problemService");
+const { handle, required } = require("../lib/http");
+const { toISODate } = require("../lib/dates");
 
 /**
  * POST /users
- * Single entry point for login/signup. Always reconciles the local record
- * with the Codeforces API (handles new users, rating drift, casing).
+ * Body: { userID }
+ * Returns: { user, today: { dateISO, problem, streak } }
+ *
+ * Single onboarding endpoint. Upserts the user (case-insensitive),
+ * reconciles rating from Codeforces, and returns enough for the extension
+ * to render the home screen in one round-trip.
  */
-const createUser = async (req, res) => {
-  try {
-    const userID = req.body.userID;
-    if (!userID) return res.status(400).json("UserID is required");
-
-    const user = await userService.getOrCreateUser(userID);
-    res.status(200).json({ message: user });
-  } catch (err) {
-    sendError(res, err);
-  }
-};
+exports.createOrLogin = handle(async (req) => {
+  const userID = required(req.body?.userID, "userID");
+  const user = await userService.getOrCreateUser(userID);
+  return buildUserView(user);
+});
 
 /**
- * POST /users/refresh-rating
- * Kept as an explicit manual-refresh endpoint, but internally just delegates
- * to getOrCreateUser so the Codeforces-sync logic lives in one place.
+ * GET /users/:userID
+ * Returns: { user, today } — same shape as POST for consistency.
  */
-const refreshUserRating = async (req, res) => {
-  try {
-    const userID = req.body.userID;
-    if (!userID) return res.status(400).json("UserID is required");
-
-    const user = await userService.refreshUserRating(userID);
-    res.status(200).json({ message: user });
-  } catch (err) {
-    sendError(res, err);
+exports.getUser = handle(async (req) => {
+  const userID = required(req.params.userID, "userID");
+  const user = await userService.findUser(userID);
+  if (!user) {
+    const err = new Error(`User not found: ${userID}`);
+    err.statusCode = 404;
+    throw err;
   }
-};
-
-const updateUserStreak = async (req, res) => {
-  try {
-    const { userID, last_streak_count, updateDate } = req.body;
-    if (!userID) return res.status(400).json("UserID is required");
-    if (last_streak_count === undefined) return res.status(400).json("last_streak_count is required");
-
-    const user = await userService.updateUserStreak(userID, last_streak_count, updateDate === true);
-    res.status(200).json({ message: user });
-  } catch (err) {
-    sendError(res, err);
-  }
-};
-
-const updateUserStreakDay = async (req, res) => {
-  try {
-    const { userID, day, solved } = req.body;
-    if (!userID) return res.status(400).json("UserID is required");
-    if (!day) return res.status(400).json("Day is required");
-
-    const user = await userService.updateUserStreakDay(userID, day, solved !== false);
-    res.status(200).json({ message: user });
-  } catch (err) {
-    sendError(res, err);
-  }
-};
-
-const resetUserStreakDays = async (req, res) => {
-  try {
-    const userID = req.body.userID;
-    if (!userID) return res.status(400).json("UserID is required");
-
-    const user = await userService.resetUserStreakDays(userID);
-    res.status(200).json({ message: user });
-  } catch (err) {
-    sendError(res, err);
-  }
-};
-
-const cleanupOldStreakDays = async (req, res) => {
-  try {
-    const userID = req.body.userID;
-    if (!userID) return res.status(400).json("UserID is required");
-
-    const user = await userService.cleanupOldStreakDays(userID);
-    res.status(200).json({ message: "Old streak days cleaned up", user });
-  } catch (err) {
-    sendError(res, err);
-  }
-};
+  return buildUserView(user);
+});
 
 /**
- * PUT /users/streak-date
- * Thin wrapper — only used by the frontend streak reconciler to set
- * last_streak_date to a specific past date.
+ * POST /users/:userID/refresh-rating
+ * Force a Codeforces re-sync. Useful for the "refresh rating" button even
+ * though getOrCreateUser is already idempotent on login.
  */
-const updateUserStreakDate = async (req, res) => {
-  try {
-    const { userID, last_streak_date } = req.body;
-    if (!userID) return res.status(400).json("UserID is required");
-    if (!last_streak_date) return res.status(400).json("last_streak_date is required");
+exports.refreshRating = handle(async (req) => {
+  const userID = required(req.params.userID, "userID");
+  const user = await userService.getOrCreateUser(userID);
+  return buildUserView(user);
+});
 
-    const user = await User.findOneAndUpdate(
-      { userID },
-      { $set: { "streak.last_streak_date": new Date(last_streak_date) } },
-      { new: true }
-    );
-    if (!user) return res.status(404).json("User not found");
-
-    res.status(200).json({ message: user });
-  } catch (err) {
-    sendError(res, err);
-  }
-};
-
-module.exports = {
-  getUser,
-  createUser,
-  refreshUserRating,
-  updateUserStreak,
-  updateUserStreakDay,
-  resetUserStreakDays,
-  cleanupOldStreakDays,
-  updateUserStreakDate
-};
+async function buildUserView(user) {
+  const dateISO = toISODate(new Date());
+  const [problem, streak] = await Promise.all([
+    problemService.getDailyProblem(user.rating, dateISO),
+    streakService.getCurrentStreak(user.userID)
+  ]);
+  return {
+    user: {
+      userID: user.userID,
+      rating: user.rating,
+      ratingUpdatedAt: user.ratingUpdatedAt,
+      createdAt: user.createdAt
+    },
+    today: { dateISO, problem, streak }
+  };
+}

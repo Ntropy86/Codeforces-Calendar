@@ -1,51 +1,28 @@
 /**
- * Manual triggers for the cron jobs defined in cron/scheduledJobs.js.
+ * Manual triggers for the V3 cron jobs.
  *
- * Mounted at `/test/cron` and gated on NODE_ENV !== "production" in app.js —
- * these routes MUST NOT be reachable on a live deployment.
+ * Mounted at `/test/cron` and gated on NODE_ENV !== "production" in app.js.
+ * In production these are triggered externally (GCP Cloud Scheduler →
+ * HTTPS webhook to these same handler functions behind shared-secret auth;
+ * we keep the paths identical so prod & dev have the same contract).
  */
 const express = require("express");
-const mongoose = require("mongoose");
+const problemService = require("../services/problemService");
+const submissionService = require("../services/submissionService");
+const { handle } = require("../lib/http");
+
 const router = express.Router();
 
-const filteredProblemSetService = require("../services/filteredProblemSetService");
-const globalProblemSetService = require("../services/globalProblemSetService");
-const userService = require("../services/userService");
-const Models = require("../models/models");
-
-const User = mongoose.model("User", Models.userSchema);
-
-const handle = (fn) => async (req, res) => {
-  try {
-    const result = await fn(req);
-    res.status(200).json({ success: true, ...result });
-  } catch (err) {
-    console.error("[test/cron] failed:", err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-};
-
-router.post("/update-global-problem-set", handle(async () => ({
-  stats: await globalProblemSetService.updateGlobalProblemSet()
+/** Pull latest problems from Codeforces into the `problems` collection. */
+router.post("/refresh-global-problems", handle(async () => ({
+  success: true,
+  stats: await problemService.refreshGlobalProblems()
 })));
 
-router.post("/generate-filtered-problem-sets", handle(async () => ({
-  stats: await filteredProblemSetService.generateFilteredProblemSets()
+/** Trim old submissions (default: older than 90 days). */
+router.post("/prune-submissions", handle(async (req) => ({
+  success: true,
+  stats: await submissionService.pruneOldSubmissions(req.body?.cutoffISO)
 })));
-
-router.post("/cleanup-streak-data", handle(async (req) => {
-  if (req.body.userID) {
-    const user = await userService.cleanupOldStreakDays(req.body.userID);
-    return { user };
-  }
-  const users = await User.find({}).limit(10);
-  const results = [];
-  for (const u of users) {
-    if (!u.userID) continue;
-    const result = await userService.cleanupOldStreakDays(u.userID);
-    results.push({ userID: u.userID, success: !!result });
-  }
-  return { results };
-}));
 
 module.exports = router;
