@@ -1,91 +1,65 @@
-# Codeforces POTD System Documentation
+# Scheduled Jobs (Backend)
 
-## Automated Background Tasks
+All background automation for the Codeforces POTD project lives on the
+backend. The extension never runs its own timers — it reconciles with the
+backend on every page load (`syncWithBackend` in `src/extension/content.js`),
+throttled by `SYNC_THROTTLE_MS`.
 
-The system includes several automated background jobs that keep the application running smoothly without manual intervention.
+## Design Shift in V3
 
-### Backend Cron Jobs
+The day's problem is **not** produced by a scheduled job anymore. It's a
+pure function of `(rating, date, problemPool)` computed on read — see
+`src/backend/lib/dailyProblem.js`. That means:
 
-| Job | Schedule | Description |
-|-----|----------|-------------|
-| Global Problem Set Update | Daily at 1:00 AM | Fetches new problems from Codeforces API and updates the database. |
-| Filtered Problem Set Generation | Daily at 2:00 AM | Ensures problems are populated for the current day and prepares problems for the next month when approaching month-end. |
-| Streak Data Cleanup | Weekly on Sunday at 3:00 AM | Removes streak data older than 3 months to keep the database efficient. |
+- Two users at the same rating, on the same UTC day, always get the same
+  problem. No "generate the feed at 05:00" race, no per-rating batch to
+  backfill.
+- A missed cron tick can't break today's feed. The worst thing a skipped
+  run causes is a slightly stale pool until the next refresh lands.
 
-### Extension Periodic Tasks
+So the only cron tasks that remain are **data-freshness** chores.
 
-| Task | Schedule | Description |
-|------|----------|-------------|
-| Streak Status Check | Every 6 hours | Checks if a user's streak should be reset due to inactivity and performs cleanup on the first day of the month. |
-| Submission Check | Every hour | Verifies if the user has submitted a solution for today's problem and updates their streak accordingly. |
+## Jobs
 
-## Testing Endpoints
+Registered by `src/backend/cron/scheduledJobs.js`, opt-in via
+`ENABLE_CRON=true` in the loaded `.env`. Timezone defaults to UTC and can
+be overridden with `CRON_TIMEZONE`.
 
-The system provides several endpoints to manually trigger and test the automated jobs.
+| Job                       | Schedule (UTC)        | Purpose                                                                 |
+| ------------------------- | --------------------- | ----------------------------------------------------------------------- |
+| `refresh-global-problems` | Sunday 05:11          | Pull new problems from the CF problemset API into the `problems` pool.  |
+| `prune-submissions`       | Sunday 06:07          | Delete `submissions` docs older than 90 days to keep the collection small. |
 
-### Backend Test Routes
+Weekly is deliberate. The selector freezes each rating bucket's candidate
+pool at the start of its ISO week, so any problem added during the week
+wouldn't be eligible until the next Monday anyway — there's nothing a
+more frequent refresh would buy.
 
-| Route | Method | Description |
-|-------|--------|-------------|
-| `/test/cron/update-global-problem-set` | POST | Manually triggers the global problem set update job. |
-| `/test/cron/generate-filtered-problem-sets` | POST | Manually triggers the filtered problem set generation job. |
-| `/test/cron/cleanup-streak-data` | POST | Manually triggers the streak data cleanup job. Can target a specific user if `userID` is provided in the request body. |
+## Manual Triggers (dev only)
 
-### Extension Debug Functions
+Routes are mounted at `/test/cron` and gated on `NODE_ENV !== "production"`
+in `src/backend/app.js`. They return `{ success, stats }` exactly like
+the scheduler does — handy for smoke tests and migrations.
 
-The following functions are available in the extension's background page console via `window.debugExtension`:
+| Route                              | Method | What it does                                                 |
+| ---------------------------------- | ------ | ------------------------------------------------------------ |
+| `/test/cron/refresh-global-problems` | POST   | Pull the latest CF problems into the pool right now.         |
+| `/test/cron/prune-submissions`       | POST   | Prune old submissions (body can override `cutoffISO`).       |
 
-| Function | Description |
-|----------|-------------|
-| `triggerStreakCheck()` | Manually triggers the streak status check. |
-| `triggerSubmissionCheck()` | Manually triggers the submission check. |
-| `checkAlarmStatus()` | Retrieves and logs the current active alarms. |
-| `resetAlarms()` | Clears all alarms and sets them up again. |
-
-## Implementation Details
-
-### Backend Cron Jobs (scheduledJobs.js)
-
-The backend cron jobs are implemented using the `node-cron` package. The implementation is located in `src/backend/cron/scheduledJobs.js`.
-
-Key features:
-- Detailed logging with timestamps
-- Comprehensive error handling
-- Individual user processing for streak cleanup
-
-### Extension Periodic Tasks (background.js)
-
-The extension periodic tasks are implemented using Chrome's alarm API. The implementation is located in `extension/background.js`.
-
-Key features:
-- Script injection to ensure functions run in the proper context
-- Robust error handling
-- Detailed logging for debugging
-
-## Testing Instructions
-
-### Testing Backend Cron Jobs
-
-1. Start your backend server
-2. Send a POST request to the desired test endpoint:
 ```bash
-curl -X POST http://localhost:4000/test/cron/update-global-problem-set
-curl -X POST http://localhost:4000/test/cron/generate-filtered-problem-sets
-curl -X POST http://localhost:4000/test/cron/cleanup-streak-data
+curl -X POST http://localhost:4000/test/cron/refresh-global-problems
+curl -X POST http://localhost:4000/test/cron/prune-submissions
 ```
 
-3. Check the server logs for execution details
+## Operational Notes
 
-### Testing Extension Periodic Tasks
-
-1. Open your extension in Chrome
-2. Navigate to a Codeforces page
-3. Open the background page console (right-click on extension → Inspect views: service worker)
-4. Run one of the debug functions:
-```js
-window.debugExtension.triggerStreakCheck();
-window.debugExtension.triggerSubmissionCheck();
-window.debugExtension.checkAlarmStatus();
-window.debugExtension.resetAlarms();
-```
-5. Check console logs for execution
+- **Idempotent**: both jobs are safe to run repeatedly. `refresh-global-problems`
+  inserts only new `cfId`s and patches ratings on existing docs;
+  `prune-submissions` is a bounded `deleteMany`.
+- **Failure is local**: a throw inside a job is logged and the scheduler
+  keeps running. There's no retry queue.
+- **Single-instance**: `node-cron` runs in-process, so multi-instance
+  deployments would double-schedule. If you ever scale horizontally, move
+  these two jobs to an external scheduler (GCP Cloud Scheduler, k8s
+  CronJob, etc.) and hit the same `/test/cron/*` handlers behind a
+  shared-secret header.

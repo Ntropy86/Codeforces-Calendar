@@ -1,0 +1,72 @@
+services:
+  # MongoDB Database
+  mongo:
+    image: mongo:7.0
+    container_name: cf-calendar-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: codeforces-calendar
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    networks:
+      - cf-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/codeforces-calendar --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API Server
+  backend:
+    build:
+      context: ./src/backend
+      dockerfile: Dockerfile
+    container_name: cf-calendar-backend
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    env_file:
+      # Load environment from .env.development file
+      - ./src/backend/.env.development
+    volumes:
+      # Mount source code for hot-reload during development.
+      # Path must match the Dockerfile's WORKDIR (/usr/src/app) so that
+      # nodemon watches the same files Node is actually executing.
+      - ./src/backend:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - cf-network
+    command: npm run dev
+
+  # Mongo Express - Web-based MongoDB admin interface (optional)
+  mongo-express:
+    image: mongo-express:latest
+    container_name: cf-calendar-mongo-express
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://mongo:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: admin123
+    depends_on:
+      - mongo
+    networks:
+      - cf-network
+
+networks:
+  cf-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+    driver: local
+  mongodb_config:
+    driver: local
+

@@ -1,20 +1,19 @@
-# Use Node.js LTS version
 FROM node:20-slim
 
-# Create app directory
 WORKDIR /usr/src/app
 
-# Copy package files
+# Copy lockfile + manifest first so the install layer caches independently
+# of source changes.
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install
+# `npm ci` respects the lockfile verbatim — faster and more deterministic
+# than `npm install`, which is the behaviour we want in both CI and the
+# production image. docker-compose for local dev overrides CMD to run
+# nodemon against the bind-mounted source, so devDependencies need to ship.
+RUN npm ci
 
-# Copy app source
 COPY . .
 
-# Expose port that your app uses
 EXPOSE 4000
 
-# Start the application
-CMD [ "node", "index.js" ]
+CMD ["node", "index.js"]

@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "ver/**", "refactor/**", "feature/**"]
+  pull_request:
+    branches: [main, "ver/**"]
+
+# Cancel in-progress runs on the same ref when a new push lands —
+# saves CI minutes during rapid iteration on a PR.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend — lint, format, test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/backend
+
+    strategy:
+      matrix:
+        node: [20, 22]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: src/backend/package-lock.json
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Test (with coverage on Node 22)
+        run: |
+          if [ "${{ matrix.node }}" = "22" ]; then
+            npm run test:coverage
+          else
+            npm test
+          fi
+
+      - name: Upload coverage artifact
+        if: matrix.node == '22'
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: src/backend/coverage
+          retention-days: 14
+          if-no-files-found: ignore

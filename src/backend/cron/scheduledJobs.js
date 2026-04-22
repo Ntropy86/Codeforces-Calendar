@@ -1,102 +1,45 @@
 /**
- * Scheduled jobs for Codeforces POTD backend
- * This file sets up cron jobs to run various maintenance tasks
+ * V3 in-process cron. Opt-in via ENABLE_CRON=true in the environment.
+ *
+ * "Daily problem for rating X on date Y" is NOT a scheduled job in V3 —
+ * it's derived on read (see lib/dailyProblem.js). The only things we
+ * schedule are data-freshness tasks:
+ *
+ *   1. Weekly: pull new CF problems into the pool. If skipped, nothing
+ *      breaks — users continue to get problems from the existing pool.
+ *   2. Weekly: prune submissions older than 90 days to keep the
+ *      collection small.
+ *
+ * Jobs are idempotent, so a missed tick just merges into the next one.
  */
-const cron = require('node-cron');
-const mongoose = require('mongoose');
-const Models = require('../models/models');
-const User = mongoose.model('User', Models.userSchema);
-const filteredProblemSetService = require('../services/filteredProblemSetService');
-const globalProblemSetService = require('../services/globalProblemSetService');
-const userService = require('../services/userService');
+const cron = require("node-cron");
+const problemService = require("../services/problemService");
+const submissionService = require("../services/submissionService");
 
-console.log('Initializing scheduled jobs...');
+const TIMEZONE = process.env.CRON_TIMEZONE || "UTC";
 
-/**
- * Update global problem set daily at 5:11 AM
- * This job fetches new problems from Codeforces API and updates the database
- */
-cron.schedule('11 5 * * *', async () => {
-  try {
-    console.log('[CRON] Running scheduled global problem set update');
-    const stats = await globalProblemSetService.updateGlobalProblemSet();
-    console.log('[CRON] Global problem set update completed:', stats);
-  } catch (error) {
-    console.error('[CRON] Error in scheduled global problem set update:', error);
-  }
-},
-{
-  scheduled: true,
-  timezone: "Asia/Kolkata"  // Explicitly set to IST
-});
-
-// problem will change around 00:00 GMT
-cron.schedule('17 5 * * *', async () => {
-  try {
-    console.log('[CRON] Running daily problem set generation/update');
-    const stats = await filteredProblemSetService.generateFilteredProblemSets();
-    console.log('[CRON] Daily problem set generation completed:', stats);
-  } catch (error) {
-    console.error('[CRON] Error in daily problem set generation:', error);
-  }
-},
-{
-  scheduled: true,
-  timezone: "Asia/Kolkata"  // Explicitly set to IST
-});
-
-/**
- * Clean up old streak data weekly on Sunday at 6:07 AM
- * This job removes streak data older than 3 months to keep the database efficient
- */
-cron.schedule('07 6 * * 0', async () => {
-  try {
-    console.log('[CRON] Running scheduled streak data cleanup');
-    
-    // Get all users
-    const users = await User.find({});
-    console.log(`[CRON] Found ${users.length} users for streak cleanup`);
-    
-    let successCount = 0;
-    let errorCount = 0;
-    
-    // Process each user
-    for (const user of users) {
+function schedule(expr, name, task) {
+  cron.schedule(
+    expr,
+    async () => {
       try {
-        if (user.userID) {
-          await userService.cleanupOldStreakDays(user.userID);
-          successCount++;
-        }
-      } catch (userError) {
-        console.error(`[CRON] Error cleaning up streak data for user ${user.userID}:`, userError);
-        errorCount++;
+        console.log(`[cron] ${name} start`);
+        const result = await task();
+        console.log(`[cron] ${name} done`, result ?? "");
+      } catch (err) {
+        console.error(`[cron] ${name} failed:`, err);
       }
-    }
-    
-    console.log(`[CRON] Streak data cleanup completed. Success: ${successCount}, Errors: ${errorCount}`);
-  } catch (error) {
-    console.error('[CRON] Error in scheduled streak data cleanup:', error);
-  }
-},
-{
-  scheduled: true,
-  timezone: "Asia/Kolkata"  // Explicitly set to IST
-});
+    },
+    { scheduled: true, timezone: TIMEZONE }
+  );
+}
 
+// Sunday 05:11 — pull new CF problems. Weekly is enough: CF publishes
+// ~2-3 contests per week, and the selector's pool-freeze guarantees
+// newly-added problems join the pool starting next Monday anyway.
+schedule("11 5 * * 0", "refresh-global-problems", () => problemService.refreshGlobalProblems());
 
-// Keep the server alive with a self-ping every 5 minutes
-cron.schedule('*/5 * * * *', async () => {
-  try {
-    console.log('[CRON] Self-ping to keep service alive');
-    // This doesn't make an actual request, just logs to keep the instance active
-  } catch (error) {
-    console.error('[CRON] Error in keep-alive ping:', error);
-  }
-},
-{
-  scheduled: true,
-  timezone: "Asia/Kolkata"  // Explicitly set to IST
-});
+// Sunday 06:07 — prune submissions >90 days old.
+schedule("07 6 * * 0", "prune-submissions", () => submissionService.pruneOldSubmissions());
 
-// Log that cron jobs are initialized
-console.log('Scheduled jobs initialized successfully');
+console.log(`[cron] scheduled jobs initialized (tz=${TIMEZONE})`);

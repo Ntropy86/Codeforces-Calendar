@@ -37,7 +37,7 @@ window.storage = {
     async set(key, value) {
       return new Promise((resolve) => {
         chrome.storage.local.set({ [key]: value }, () => {
-          console.log(`Storage: Set ${key}`, value);
+          window.log?.debug?.(`[storage] set ${key}`);
           resolve();
         });
       });
@@ -57,13 +57,19 @@ window.storage = {
     },
     
     /**
-     * Clear specific keys from storage
-     * @param {Array<string>} keys - Keys to clear
+     * Clear storage (all data or specific keys)
+     * @param {Array<string>} [keys] - Optional keys to clear. If not provided, clears everything.
      * @returns {Promise<void>}
      */
     async clear(keys) {
       return new Promise((resolve) => {
-        chrome.storage.local.remove(keys, resolve);
+        if (keys && Array.isArray(keys) && keys.length > 0) {
+          // Clear specific keys
+          chrome.storage.local.remove(keys, resolve);
+        } else {
+          // Clear everything
+          chrome.storage.local.clear(resolve);
+        }
       });
     }
   };

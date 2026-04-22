@@ -1,18 +1,21 @@
 .DS_Store
+**/.DS_Store
+
 node_modules/
 bundle.js
+build/
+dist/
 npm-debug.log
+coverage/
 
 /.idea
 /public
 
+# Environment files (contain secrets). Keep *.example for onboarding.
 .env
+.env.*
+!.env.example
 .passport.js
-.DS_Store
 
-build/
-dist/
-
-/src/backend/plan.txt
-cronjobs.md
-optimizations.md
+# Extension runtime config (contains API endpoints per environment).
+/src/extension/config.json

@@ -1,296 +1,133 @@
 /**
- * API service to interact with the backend
+ * Backend API client for the extension (V3 contract).
+ *
+ * Every backend call returns a flat, predictable shape — no more deep-array
+ * unwrapping. Transient network failures are retried up to 3 times with a
+ * fixed back-off before surfacing to the caller.
+ *
+ * `verifySubmission` hits the Codeforces API directly (CORS-open) because
+ * the backend doesn't need to be in that loop — rationale in
+ * services/submissionService.js.
  */
+
+const DEFAULT_MAX_RETRIES = 3;
+const DEFAULT_RETRY_DELAY_MS = 1500;
+
+async function fetchWithRetry(url, options = {}, {
+  maxRetries = DEFAULT_MAX_RETRIES,
+  delayMs = DEFAULT_RETRY_DELAY_MS
+} = {}) {
+  let lastError;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      window.log.debug(`[api] ${options.method || "GET"} ${url} (try ${attempt})`);
+      const res = await fetch(url, options);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        const err = new Error(body.error || `HTTP ${res.status}`);
+        err.statusCode = res.status;
+        // 4xx won't succeed on retry — the loop below bails via `isClientErr`.
+        throw err;
+      }
+      return await res.json();
+    } catch (err) {
+      lastError = err;
+      const isClientErr = err.statusCode >= 400 && err.statusCode < 500;
+      if (isClientErr || attempt === maxRetries) break;
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+  throw lastError;
+}
+
+function base() {
+  const url = window.config.current.API_URL;
+  if (!url) throw new Error("API_URL not configured — check config.json");
+  return url;
+}
+
 window.api = {
   /**
-   * Enhanced fetch with retry logic
-   * @param {string} url - API URL
-   * @param {Object} options - Fetch options
-   * @param {number} maxRetries - Maximum number of retries
-   * @param {number} delay - Delay between retries in ms
-   * @returns {Promise<Object>} Response data
-   */
-  async fetchWithRetry(url, options, maxRetries = 3, delay = 2000) {
-    let lastError;
-    
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        console.log(`API attempt ${attempt + 1} for ${url}`);
-        const response = await fetch(url, options);
-        
-        // Handle non-2xx responses
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => null);
-          throw new Error(`HTTP error ${response.status}: ${errorData ? JSON.stringify(errorData) : response.statusText}`);
-        }
-        
-        return await response.json();
-      } catch (error) {
-        console.warn(`Attempt ${attempt + 1} failed:`, error);
-        lastError = error;
-        
-        // Wait before retrying
-        if (attempt < maxRetries - 1) {
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
-      }
-    }
-    
-    throw lastError;
-  },
-
-  /**
-   * Create or get user information
-   * @param {string} handle - Codeforces handle
-   * @returns {Promise<Object>} User information
+   * POST /users — upsert + Codeforces rating sync in one call.
+   * Returns { user, today: { dateISO, problem, streak } }.
    */
   async getOrCreateUser(handle) {
-    try {
-      const response = await this.fetchWithRetry(`${window.config.current.API_URL}/users`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ userID: handle })
-      });
-      
-      console.log("API getOrCreateUser response:", response);
-      
-      // Extract the actual user data, not just messages
-      let userData = null;
-      
-      if (response.message && typeof response.message === 'object') {
-        // If message contains user data
-        userData = response.message;
-      } else if (response.user) {
-        // If user data is in user property
-        userData = response.user;
-      } else if (response.message && Array.isArray(response.message) && response.message.length > 0) {
-        userData = response.message[0];
-      }
-      
-      if (!userData) {
-        throw new Error("Failed to extract user data from response");
-      }
-      
-      console.log("Extracted user data:", userData);
-      return userData;
-    } catch (error) {
-      window.errorHandler.logError('getOrCreateUser', error);
-      throw error;
-    }
+    return fetchWithRetry(`${base()}/users`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userID: handle })
+    });
+  },
+
+  /** GET /users/:userID — same shape as POST, no CF re-sync. */
+  async getUser(handle) {
+    return fetchWithRetry(`${base()}/users/${encodeURIComponent(handle)}`);
+  },
+
+  /** POST /users/:userID/refresh-rating — force CF re-sync. */
+  async refreshRating(handle) {
+    return fetchWithRetry(`${base()}/users/${encodeURIComponent(handle)}/refresh-rating`, {
+      method: "POST"
+    });
+  },
+
+  /** GET /problems/daily?rating=X&date=YYYY-MM-DD. */
+  async getDailyProblem(rating, dateISO) {
+    const qs = new URLSearchParams({ rating });
+    if (dateISO) qs.set("date", dateISO);
+    return fetchWithRetry(`${base()}/problems/daily?${qs}`);
+  },
+
+  /** GET /problems?rating=X&from=YYYY-MM-DD&to=YYYY-MM-DD. */
+  async getProblemsInRange(rating, fromISO, toISO) {
+    const qs = new URLSearchParams({ rating, from: fromISO, to: toISO });
+    return fetchWithRetry(`${base()}/problems?${qs}`);
+  },
+
+  /** POST /submissions — idempotent. Returns { submission, streak }. */
+  async recordSubmission(handle, problemCfId, dateISO) {
+    return fetchWithRetry(`${base()}/submissions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userID: handle, problemCfId, dateISO })
+    });
   },
 
   /**
-   * Update user streak
-   * @param {string} handle - Codeforces handle
-   * @param {number} streakCount - Current streak count
-   * @param {boolean} updateDate - Whether to update the streak date
-   * @returns {Promise<Object>} Updated user information
+   * GET /submissions?userID=X&from=...&to=... — returns `items` and a
+   * pre-built `solvedDays` map keyed by dateISO.
    */
-  async updateUserStreak(handle, streakCount, updateDate = false) {
-    try {
-      console.log(`Updating streak for ${handle} to ${streakCount} (updateDate: ${updateDate})`);
-      
-      const response = await this.fetchWithRetry(`${window.config.current.API_URL}/users`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          userID: handle,
-          last_streak_count: streakCount,
-          updateDate: updateDate
-        })
-      });
-      
-      console.log("API updateUserStreak response:", response);
-      
-      let userData = null;
-      
-      if (response.message && typeof response.message === 'object') {
-        userData = response.message;
-      } else if (response.user) {
-        userData = response.user;
-      }
-      
-      if (!userData) {
-        throw new Error("Failed to extract updated user data from response");
-      }
-      
-      return userData;
-    } catch (error) {
-      window.errorHandler.logError('updateUserStreak', error);
-      throw error;
-    }
+  async getSubmissions(handle, fromISO, toISO) {
+    const qs = new URLSearchParams({ userID: handle, from: fromISO, to: toISO });
+    return fetchWithRetry(`${base()}/submissions?${qs}`);
   },
 
   /**
-   * Clean up old streak days
-   * @param {string} handle - Codeforces handle
-   * @returns {Promise<Object>} Updated user information
+   * Query Codeforces directly to check whether the handle has an AC for
+   * a given problem. Returns { verified: boolean, submission? }.
+   *
+   * We scan the user's most recent 30 submissions, which comfortably covers
+   * a day's worth of activity for any realistic user.
    */
-  async cleanupOldStreakDays(handle) {
+  async verifySubmission(handle, problemCfId) {
+    if (!handle || !problemCfId) return { verified: false, reason: "missing args" };
     try {
-      console.log(`Cleaning up old streak days for ${handle}`);
-      
-      const response = await this.fetchWithRetry(`${window.config.current.API_URL}/users/cleanup-streak-days`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          userID: handle
-        })
-      });
-      
-      console.log("API cleanupOldStreakDays response:", response);
-      
-      let userData = null;
-      
-      if (response.message && typeof response.message === 'object') {
-        userData = response.message;
-      } else if (response.user) {
-        userData = response.user;
+      const url = `https://codeforces.com/api/user.status?handle=${encodeURIComponent(handle)}&from=1&count=30`;
+      const res = await fetch(url);
+      const body = await res.json();
+      if (body.status !== "OK") {
+        return { verified: false, reason: body.comment || "CF API error" };
       }
-      
-      if (!userData) {
-        throw new Error("Failed to extract updated user data from response");
-      }
-      
-      return userData;
-    } catch (error) {
-      window.errorHandler.logError('cleanupOldStreakDays', error);
-      throw error;
-    }
-  },
-
-  /**
-   * Get monthly problems for a specific rating
-   * @param {number} month - Month (1-12)
-   * @param {number} year - Year
-   * @param {number} rating - Problem rating
-   * @returns {Promise<Array>} Array of problems for the month
-   */
-  async getMonthlyProblems(month, year, rating) {
-    try {
-      const offset = 200;
-      rating = Math.ceil(rating / 100) * 100 + offset; 
-      console.log('Rating:', rating);
-      const url = `${window.config.current.API_URL}/problemset/monthly?month=${month}&year=${year}&rating=${rating}`;
-      console.log("Fetching monthly problems from api.js :", url);
-      
-      const response = await this.fetchWithRetry(url, { method: 'GET' });
-      console.log("API getMonthlyProblems response: api.js", response);
-      
-      if (response.data) {
-        return response.data;
-      }
-      
-      throw new Error(`Failed to get monthly problems: ${JSON.stringify(response)}`);
-    } catch (error) {
-      window.errorHandler.logError('getMonthlyProblems', error);
-      throw error;
-    }
-  },
-  
-  /**
-   * Verify user submissions for today's problem
-   * @param {string} handle - Codeforces handle
-   * @param {Object} problem - Problem details
-   * @returns {Promise<Object>} Verification result
-   */
-  async verifySubmission(handle, problem) {
-    try {
-      const test_mode =false ; // WARNING: Set to true for testing
-
-      // Fetch recent submissions from Codeforces API
-      const url = test_mode? `${window.config.current.API_URL}/test/submissions`:`https://codeforces.com/api/user.status?handle=${handle}&from=1&count=10`;      
-
-      console.log("Fetching submissions from:", url);
-      
-      const response = await this.fetchWithRetry(url, { method: 'GET' });
-      
-      if (response.status !== "OK") {
-        throw new Error(`Codeforces API error: ${response.comment || 'Unknown error'}`);
-      }
-
-      // console.log('API VERIFY SUBMISSIONS RESPONSE:', response.result ,response.result.length);
-      
-      // Check if any submission matches today's problem and is accepted
-      if (response.result && response.result.length > 0) {
-        for (const submission of response.result) {
-          
-          const isCorrectProblem = 
-            problem && 
-            submission.problem.contestId === problem.problem.contestId &&
-            submission.problem.index === problem.problem.index;
-          
-          const isAccepted = submission.verdict === "OK";
-          
-          if (isCorrectProblem && isAccepted) {
-          console.log('API VERIFY SUBMISSIONS:', submission.problem.contestId, submission.problem.index, submission.verdict);
-          console.log('API VERIFY PROBLEMS:', problem.problem.contestId, problem.problem.index);
-            return {
-              verified: true,
-              submission: submission
-            };
-          }
+      for (const s of body.result || []) {
+        const cfId = `${s.problem.contestId}${s.problem.index}`;
+        if (cfId === problemCfId && s.verdict === "OK") {
+          return { verified: true, submission: s };
         }
       }
-      
-      return {
-        verified: false,
-        message: "No accepted submission found for today's problem"
-      };
-    } catch (error) {
-      window.errorHandler.logError('verifySubmission', error);
-      return {
-        verified: false,
-        error: error.message
-      };
+      return { verified: false, reason: "no matching AC found" };
+    } catch (err) {
+      window.log.warn("[api] verifySubmission failed:", err.message);
+      return { verified: false, reason: err.message };
     }
-  },
-
-  /**
- * Update only the last_streak_date in the database
- * @param {string} handle - Codeforces handle
- * @param {string} dateString - ISO date string to set as last_streak_date
- * @returns {Promise<Object>} Updated user information
- */
-async updateLastStreakDate(handle, dateString) {
-  try {
-    console.log(`Updating last_streak_date for ${handle} to ${dateString}`);
-    
-    const response = await this.fetchWithRetry(`${window.config.current.API_URL}/users/streak-date`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        userID: handle,
-        last_streak_date: dateString
-      })
-    });
-    
-    console.log("API updateLastStreakDate response:", response);
-    
-    let userData = null;
-    
-    if (response.message && typeof response.message === 'object') {
-      userData = response.message;
-    } else if (response.user) {
-      userData = response.user;
-    }
-    
-    if (!userData) {
-      throw new Error("Failed to extract updated user data from response");
-    }
-    
-    return userData;
-  } catch (error) {
-    window.errorHandler.logError('updateLastStreakDate', error);
-    throw error;
   }
-}
 };
