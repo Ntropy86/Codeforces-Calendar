@@ -363,8 +363,9 @@ async function handleDataRefresh() {
             // Get current month and year
             const { month, year } = window.dateUtils.getCurrentMonthAndYear();
             console.log("DEBUG userInfo handleDataRefresh bg.js", userData);
-            // Get user rating
-            const userRating = userData.rating || 800;
+            // Get user rating (the backend returns an array for existing users)
+            const user = Array.isArray(userData) ? userData[0] : userData;
+            const userRating = (user && user.rating) || 600;
             
             // Get problems for current month and user's rating
             const problemsData = await window.api.getMonthlyProblems(month, year, userRating);

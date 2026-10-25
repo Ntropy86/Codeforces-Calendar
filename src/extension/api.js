@@ -166,6 +166,24 @@ window.api = {
   },
 
   /**
+   * Snap a rating to the closest category the backend generates problems for
+   * (mirrors RATING_CATEGORIES in filteredProblemSetService.js). Without this,
+   * ratings like 900 or 1100 return an empty problem list. Ties go to the lower one.
+   * @param {number} rating - Desired problem rating
+   * @returns {number} Closest available rating category
+   */
+  closestRatingCategory(rating) {
+    const categories = [
+      600, 800, 1000, 1200, 1300, 1400, 1500, 1600,
+      1700, 1800, 1900, 2000, 2100, 2200, 2300, 2400,
+      2500, 2600, 2700, 2800, 2900, 3000, 3100, 3200, 3300, 3400, 3500
+    ];
+    return categories.reduce((best, category) =>
+      Math.abs(category - rating) < Math.abs(best - rating) ? category : best
+    );
+  },
+
+  /**
    * Get monthly problems for a specific rating
    * @param {number} month - Month (1-12)
    * @param {number} year - Year
@@ -175,7 +193,7 @@ window.api = {
   async getMonthlyProblems(month, year, rating) {
     try {
       const offset = 200;
-      rating = Math.ceil(rating / 100) * 100 + offset; 
+      rating = this.closestRatingCategory(Math.ceil(rating / 100) * 100 + offset);
       console.log('Rating:', rating);
       const url = `${window.config.current.API_URL}/problemset/monthly?month=${month}&year=${year}&rating=${rating}`;
       console.log("Fetching monthly problems from api.js :", url);
