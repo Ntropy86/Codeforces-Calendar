@@ -14,12 +14,12 @@ async function createCalendar() {
   try {
     window.dateUtils.logDateDebugInfo();
     
-    const currentDate = new Date();
-    const slicedDate = window.dateUtils.getTodayISO(); // Use the updated UTC method
-    console.log("Current date (ISO UTC):", slicedDate);
+    const currentDate = window.dateUtils.now(); // Local wall clock, read with UTC getters
+    const slicedDate = window.dateUtils.getTodayISO();
+    console.log("Current date (ISO local):", slicedDate);
 
-    const currentYear = currentDate.getUTCFullYear(); // Use UTC year
-    const currentMonth = currentDate.getUTCMonth(); // Use UTC month
+    const currentYear = currentDate.getUTCFullYear();
+    const currentMonth = currentDate.getUTCMonth();
     const displayMonth = currentMonth + 1; // Adjust for display
 
     const monthNames = [
@@ -95,7 +95,7 @@ async function createCalendar() {
 
     if (!window.cfPotdIsRefreshing && userHandle !== "Unknown") {
       try {
-        const todayISO = window.dateUtils.getTodayISO(); // This now uses the UTC method
+        const todayISO = window.dateUtils.getTodayISO(); // Local date
         console.log("Today's ISO date for submission check:", todayISO);
         
         const todaysProblem = problemData.find(function(problem) {
@@ -191,7 +191,7 @@ async function createCalendar() {
     const firstDay = new Date(Date.UTC(currentYear, currentMonth, 1)).getUTCDay();
     const daysInMonth = new Date(Date.UTC(currentYear, currentMonth + 1, 0)).getUTCDate();
     let day = 1;
-    const referenceDate = currentDate.getUTCDate(); // today's day-of-month in UTC
+    const referenceDate = currentDate.getUTCDate(); // today's day-of-month in local time
 
     for (let i = 0; i < 6; i++) {
       calendarHTML += "<tr>";

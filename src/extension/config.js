@@ -36,18 +36,46 @@ window.errorHandler = {
   }
 };
 
-// Update window.dateUtils to handle timezone properly using UTC
+// Dates follow the user's local timezone: the day changes at the user's midnight.
+// now() returns a Date whose UTC getters read the local wall clock, so the rest of
+// the code can keep using getUTC*/setUTC* and Date.UTC consistently.
 window.dateUtils = {
-  getTodayISO() {
-    // Get current date in UTC
-    const now = new Date();
-    // Format to YYYY-MM-DD in UTC timezone
-    return this.formatDateToUTCISO(now);
+  now() {
+    return this.toLocal(new Date());
   },
-  
+
+  // Shift a real timestamp (e.g. one stored by the backend) into local wall-clock time
+  toLocal(date) {
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60 * 1000);
+  },
+
+  // Real timestamp at local noon of a YYYY-M-D key, safe to store in the backend
+  // and read back with toLocal() as the same calendar day
+  timestampFromKey(key) {
+    const [year, month, day] = key.split('-').map(num => parseInt(num));
+    return new Date(year, month - 1, day, 12);
+  },
+
+  // Today's streak key in local time (YYYY-M-D, no padding)
+  getTodayKey() {
+    const now = this.now();
+    return `${now.getUTCFullYear()}-${now.getUTCMonth() + 1}-${now.getUTCDate()}`;
+  },
+
+  // Today's streak key in UTC, the day a backend without timezone support marks
+  getUTCTodayKey() {
+    const now = new Date();
+    return `${now.getUTCFullYear()}-${now.getUTCMonth() + 1}-${now.getUTCDate()}`;
+  },
+
+  getTodayISO() {
+    // Format to YYYY-MM-DD in local timezone
+    return this.formatDateToUTCISO(this.now());
+  },
+
   getYesterdayISO() {
-    const yesterday = new Date();
-    yesterday.setUTCDate(yesterday.getUTCDate() - 1); // Use UTC date
+    const yesterday = this.now();
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
     return this.formatDateToUTCISO(yesterday);
   },
   
@@ -70,8 +98,8 @@ window.dateUtils = {
   },
   
   getCurrentMonthAndYear() {
-    // Use UTC for consistency across timezones
-    const today = new Date();
+    // Month and year of the user's local date
+    const today = this.now();
     return {
       month: today.getUTCMonth() + 1, // 1-indexed month
       year: today.getUTCFullYear()
@@ -91,8 +119,8 @@ window.dateUtils = {
     console.log("Local Date:", localDate);
     console.log("ISO Date:", isoDate);
     console.log("UTC Date:", utcDate);
-    console.log("Today ISO (UTC method):", todayISOFromUtils);
-    console.log("Yesterday ISO (UTC method):", yesterdayISO);
+    console.log("Today ISO (local timezone):", todayISOFromUtils);
+    console.log("Yesterday ISO (local timezone):", yesterdayISO);
     console.log("============================");
     
     return todayISOFromUtils;

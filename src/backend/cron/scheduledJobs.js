@@ -30,8 +30,10 @@ cron.schedule('11 5 * * *', async () => {
   timezone: "Asia/Kolkata"  // Explicitly set to IST
 });
 
-// problem will change around 00:00 GMT
-cron.schedule('17 5 * * *', async () => {
+// Runs right after 00:00 UTC and generates up to tomorrow's problem, so the next
+// day's problem exists before it starts in any timezone. GET /problemset/monthly
+// also generates missing days in case the server was asleep at this time.
+cron.schedule('5 0 * * *', async () => {
   try {
     console.log('[CRON] Running daily problem set generation/update');
     const stats = await filteredProblemSetService.generateFilteredProblemSets();
@@ -42,7 +44,7 @@ cron.schedule('17 5 * * *', async () => {
 },
 {
   scheduled: true,
-  timezone: "Asia/Kolkata"  // Explicitly set to IST
+  timezone: "Etc/UTC"
 });
 
 /**

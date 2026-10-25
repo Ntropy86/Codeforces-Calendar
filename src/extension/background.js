@@ -363,8 +363,9 @@ async function handleDataRefresh() {
             // Get current month and year
             const { month, year } = window.dateUtils.getCurrentMonthAndYear();
             console.log("DEBUG userInfo handleDataRefresh bg.js", userData);
-            // Get user rating
-            const userRating = userData.rating || 800;
+            // Get user rating (the backend returns an array for existing users)
+            const user = Array.isArray(userData) ? userData[0] : userData;
+            const userRating = (user && user.rating) || 600;
             
             // Get problems for current month and user's rating
             const problemsData = await window.api.getMonthlyProblems(month, year, userRating);
@@ -387,7 +388,7 @@ async function handleDataRefresh() {
             // Format 1: Direct array of problems
             if (problemsData && Array.isArray(problemsData)) {
               formattedProblems = problemsData.map(problem => {
-                const date = new Date(currentYear, currentMonth - 1, problem.day);
+                const date = new Date(Date.UTC(currentYear, currentMonth - 1, problem.day));
                 return {
                   date: date.toISOString(),
                   problem: extractProblemIdParts(problem.problemID) || {
@@ -402,7 +403,7 @@ async function handleDataRefresh() {
             else if (problemsData && problemsData.ratings && problemsData.ratings[userRating]) {
               const problems = problemsData.ratings[userRating];
               Object.entries(problems).forEach(([day, problem]) => {
-                const date = new Date(currentYear, currentMonth - 1, parseInt(day));
+                const date = new Date(Date.UTC(currentYear, currentMonth - 1, parseInt(day)));
                 formattedProblems.push({
                   date: date.toISOString(),
                   problem: extractProblemIdParts(problem.problemID) || {
@@ -416,7 +417,7 @@ async function handleDataRefresh() {
             // Format 3: Problems inside nested data property
             else if (problemsData && problemsData.problems && Array.isArray(problemsData.problems)) {
               formattedProblems = problemsData.problems.map(problem => {
-                const date = new Date(currentYear, currentMonth - 1, problem.day);
+                const date = new Date(Date.UTC(currentYear, currentMonth - 1, problem.day));
                 return {
                   date: date.toISOString(),
                   problem: extractProblemIdParts(problem.problemID) || {
@@ -431,7 +432,7 @@ async function handleDataRefresh() {
             else if (problemsData && problemsData.data) {
               if (Array.isArray(problemsData.data)) {
                 formattedProblems = problemsData.data.map(problem => {
-                  const date = new Date(currentYear, currentMonth - 1, problem.day);
+                  const date = new Date(Date.UTC(currentYear, currentMonth - 1, problem.day));
                   return {
                     date: date.toISOString(),
                     problem: extractProblemIdParts(problem.problemID) || {
@@ -444,7 +445,7 @@ async function handleDataRefresh() {
               }
               else if (problemsData.data.problems && Array.isArray(problemsData.data.problems)) {
                 formattedProblems = problemsData.data.problems.map(problem => {
-                  const date = new Date(currentYear, currentMonth - 1, problem.day);
+                  const date = new Date(Date.UTC(currentYear, currentMonth - 1, problem.day));
                   return {
                     date: date.toISOString(),
                     problem: extractProblemIdParts(problem.problemID) || {
@@ -458,7 +459,7 @@ async function handleDataRefresh() {
               else if (problemsData.data.ratings && problemsData.data.ratings[userRating]) {
                 const problems = problemsData.data.ratings[userRating];
                 Object.entries(problems).forEach(([day, problem]) => {
-                  const date = new Date(currentYear, currentMonth - 1, parseInt(day));
+                  const date = new Date(Date.UTC(currentYear, currentMonth - 1, parseInt(day)));
                   formattedProblems.push({
                     date: date.toISOString(),
                     problem: extractProblemIdParts(problem.problemID) || {

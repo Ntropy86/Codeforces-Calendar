@@ -91,7 +91,10 @@ window.api = {
   async updateUserStreak(handle, streakCount, updateDate = false) {
     try {
       console.log(`Updating streak for ${handle} to ${streakCount} (updateDate: ${updateDate})`);
-      
+
+      // Remember which days were solved before, see ensureLocalStreakDay
+      const previousStreakDays = updateDate ? await window.streak.getStreakDays() : {};
+
       const response = await this.fetchWithRetry(`${window.config.current.API_URL}/users`, {
         method: 'PUT',
         headers: {
@@ -100,29 +103,90 @@ window.api = {
         body: JSON.stringify({
           userID: handle,
           last_streak_count: streakCount,
-          updateDate: updateDate
+          updateDate: updateDate,
+          date: window.dateUtils.getTodayKey() // Mark the user's local day
         })
       });
-      
+
       console.log("API updateUserStreak response:", response);
-      
+
       let userData = null;
-      
+
       if (response.message && typeof response.message === 'object') {
         userData = response.message;
       } else if (response.user) {
         userData = response.user;
       }
-      
+
       if (!userData) {
         throw new Error("Failed to extract updated user data from response");
       }
-      
+
+      if (updateDate) {
+        userData = await this.ensureLocalStreakDay(handle, userData, previousStreakDays);
+      }
+
       return userData;
     } catch (error) {
       window.errorHandler.logError('updateUserStreak', error);
       throw error;
     }
+  },
+
+  /**
+   * A backend without timezone support ignores `date` and marks its own UTC day,
+   * which for users far from UTC can be the local tomorrow or yesterday.
+   * In that case mark the local day and unmark the UTC day, unless it was already solved.
+   * @param {string} handle - Codeforces handle
+   * @param {Object} userData - User returned by the streak update
+   * @param {Object} previousStreakDays - streak_days before the update
+   * @returns {Promise<Object>} Updated user information
+   */
+  async ensureLocalStreakDay(handle, userData, previousStreakDays) {
+    const localKey = window.dateUtils.getTodayKey();
+    const streakDays = (userData.streak && userData.streak.streak_days) || {};
+
+    if (streakDays[localKey] === true) {
+      return userData;
+    }
+
+    console.log(`Backend did not mark local day ${localKey}, marking it explicitly`);
+    let updatedUser = await this.updateStreakDay(handle, localKey, true);
+
+    const utcKey = window.dateUtils.getUTCTodayKey();
+    if (utcKey !== localKey && previousStreakDays[utcKey] !== true) {
+      updatedUser = await this.updateStreakDay(handle, utcKey, false);
+    }
+
+    return updatedUser;
+  },
+
+  /**
+   * Mark a single streak day as solved or unsolved
+   * @param {string} handle - Codeforces handle
+   * @param {string} dateKey - Day to update (YYYY-M-D)
+   * @param {boolean} solved - Whether the day is solved
+   * @returns {Promise<Object>} Updated user information
+   */
+  async updateStreakDay(handle, dateKey, solved) {
+    const response = await this.fetchWithRetry(`${window.config.current.API_URL}/users/streak-day`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        userID: handle,
+        day: parseInt(dateKey.split('-')[2]), // Used by backends without timezone support
+        date: dateKey,
+        solved: solved
+      })
+    });
+
+    if (!response.message || typeof response.message !== 'object') {
+      throw new Error(`Failed to update streak day: ${JSON.stringify(response)}`);
+    }
+
+    return response.message;
   },
 
   /**
@@ -166,6 +230,58 @@ window.api = {
   },
 
   /**
+   * Snap a rating to the closest category the backend generates problems for
+   * (mirrors RATING_CATEGORIES in filteredProblemSetService.js). Without this,
+   * ratings like 900 or 1100 return an empty problem list. Ties go to the lower one.
+   * @param {number} rating - Desired problem rating
+   * @returns {number} Closest available rating category
+   */
+  closestRatingCategory(rating) {
+    const categories = [
+      600, 800, 1000, 1200, 1300, 1400, 1500, 1600,
+      1700, 1800, 1900, 2000, 2100, 2200, 2300, 2400,
+      2500, 2600, 2700, 2800, 2900, 3000, 3100, 3200, 3300, 3400, 3500
+    ];
+    return categories.reduce((best, category) =>
+      Math.abs(category - rating) < Math.abs(best - rating) ? category : best
+    );
+  },
+
+  /**
+   * Whether the problems of the current local month lack today's problem
+   * @param {Object} data - Monthly problems returned by the backend
+   * @param {number} month - Month (1-12)
+   * @param {number} year - Year
+   * @returns {boolean} True if today's problem has not been generated yet
+   */
+  isMissingTodaysProblem(data, month, year) {
+    const { month: currentMonth, year: currentYear } = window.dateUtils.getCurrentMonthAndYear();
+    if (!data || !Array.isArray(data.problems) || month !== currentMonth || year !== currentYear) {
+      return false;
+    }
+    const today = window.dateUtils.now().getUTCDate();
+    return !data.problems.some(problem => problem.day === today);
+  },
+
+  /**
+   * Ask the backend to generate the problems up to its current UTC day.
+   * Backends without on-demand generation only create them when their cron runs.
+   * Skipped on the 1st (UTC), when those backends clear and rebuild the month.
+   * @returns {Promise<void>}
+   */
+  async requestProblemGeneration() {
+    if (new Date().getUTCDate() === 1) {
+      return;
+    }
+    try {
+      console.log("Today's problem is missing, requesting generation");
+      await this.fetchWithRetry(`${window.config.current.API_URL}/problemset/filtered`, { method: 'POST' }, 1);
+    } catch (error) {
+      window.errorHandler.logError('requestProblemGeneration', error);
+    }
+  },
+
+  /**
    * Get monthly problems for a specific rating
    * @param {number} month - Month (1-12)
    * @param {number} year - Year
@@ -175,14 +291,19 @@ window.api = {
   async getMonthlyProblems(month, year, rating) {
     try {
       const offset = 200;
-      rating = Math.ceil(rating / 100) * 100 + offset; 
+      rating = this.closestRatingCategory(Math.ceil(rating / 100) * 100 + offset);
       console.log('Rating:', rating);
       const url = `${window.config.current.API_URL}/problemset/monthly?month=${month}&year=${year}&rating=${rating}`;
       console.log("Fetching monthly problems from api.js :", url);
       
-      const response = await this.fetchWithRetry(url, { method: 'GET' });
+      let response = await this.fetchWithRetry(url, { method: 'GET' });
       console.log("API getMonthlyProblems response: api.js", response);
-      
+
+      if (this.isMissingTodaysProblem(response.data, month, year)) {
+        await this.requestProblemGeneration();
+        response = await this.fetchWithRetry(url, { method: 'GET' });
+      }
+
       if (response.data) {
         return response.data;
       }

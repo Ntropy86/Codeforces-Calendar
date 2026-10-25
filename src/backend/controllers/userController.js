@@ -90,7 +90,7 @@ const updateUserStreak = async (req, res) => {
             return res.status(400).json("last_streak_count is required");
         }
         
-        const updatedUser = await userService.updateUserStreak(userID, lastStreakCount, updateDate);
+        const updatedUser = await userService.updateUserStreak(userID, lastStreakCount, updateDate, req.body.date);
         console.log("User Streak Updated", updatedUser);
         
         res.status(200).json({ "message": updatedUser });
@@ -120,7 +120,7 @@ const updateUserStreakDay = async (req, res) => {
             return res.status(400).json("Day is required");
         }
         
-        const updatedUser = await userService.updateUserStreakDay(userID, day, solved);
+        const updatedUser = await userService.updateUserStreakDay(userID, day, solved, req.body.date);
         console.log("User Streak Day Updated", updatedUser);
         
         res.status(200).json({ "message": updatedUser });

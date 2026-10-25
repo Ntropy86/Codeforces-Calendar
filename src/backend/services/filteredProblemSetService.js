@@ -179,11 +179,17 @@ const findClosestAvailableRating = async (targetRating, count) => {
  */
 const generateFilteredProblemSets = async () => {
     try {
+        // All dates are UTC. Problems are generated one day ahead so that "today's"
+        // problem already exists when the day starts in the user's own timezone
+        // (the earliest timezone, UTC+14, starts a day at 10:00 UTC of the day before).
         const today = new Date();
-        const currentDay = today.getDate();
-        const currentMonth = today.getMonth(); // Month is 0-indexed in JS Date (0-11)
-        const currentYear = today.getFullYear();
-        
+        const currentDay = today.getUTCDate();
+        const currentMonth = today.getUTCMonth(); // Month is 0-indexed in JS Date (0-11)
+        const currentYear = today.getUTCFullYear();
+        const tomorrow = new Date(Date.UTC(currentYear, currentMonth, currentDay + 1));
+        const daysInMonth = new Date(Date.UTC(currentYear, currentMonth + 1, 0)).getUTCDate();
+        const upToDay = tomorrow.getUTCMonth() === currentMonth ? tomorrow.getUTCDate() : daysInMonth;
+
         console.log(`Running filtered problem set generation for date: ${today.toISOString().split('T')[0]}`);
         
         // Stats for response
@@ -198,27 +204,12 @@ const generateFilteredProblemSets = async () => {
             errors: []
         };
         
-        // Check if we already have a problem set for this month and year
-        let filteredProblemSet = await findFilteredProblemSet(currentMonth, currentYear);
-      
-        // If it's the first day of the month or we don't have a problem set for this month, create a new one
-        if (currentDay === 1 || !filteredProblemSet) {
-            console.log(`Creating or clearing filtered problem set for ${currentMonth + 1}/${currentYear}.`);
-            
-            // If it exists, clear it (first day of month)
-            if (filteredProblemSet && currentDay === 1) {
-                await clearFilteredProblemSet(currentMonth, currentYear);
-            }
-            
-            // Create a new one
-            filteredProblemSet = await createFilteredProblemSet(currentMonth, currentYear);
-        }
-        console.log("filteredProblemSet", filteredProblemSet);
-        // shuffle(filteredProblemSet);
-        console.log("filteredProblemSetshuffled", filteredProblemSet);
-        
+        // Create the problem set for this month if needed. It is not cleared on the first
+        // day anymore: the days pre-populated at the end of last month are already shown.
+        let filteredProblemSet = await findOrCreateFilteredProblemSet(currentMonth, currentYear);
+
         // For each rating category, add problems for days that need to be populated
-        await populateProblemSet(filteredProblemSet, currentDay, stats);
+        await populateProblemSet(filteredProblemSet, upToDay, stats);
         
         // Now also check if we need to create a problem set for next month if we're near the end of the month
         // This ensures users have problems available for the next month as soon as it starts
@@ -266,6 +257,31 @@ const generateFilteredProblemSets = async () => {
     } catch (error) {
         throw error;
     }
+};
+
+// UTC date (YYYY-MM-DD) of the last successful on-demand generation in this instance
+let lastEnsuredDate = null;
+let ensureInProgress = null;
+
+/**
+ * Make sure today's and tomorrow's problems exist before serving them.
+ * The cron job alone is not reliable because the server can be asleep when it is
+ * due, so this runs at most once per UTC day per instance, on the first request.
+ * @returns {Promise<void>}
+ */
+const ensureProblemSetsUpToDate = async () => {
+    const todayKey = new Date().toISOString().split('T')[0];
+    if (lastEnsuredDate === todayKey) {
+        return;
+    }
+
+    if (!ensureInProgress) {
+        ensureInProgress = generateFilteredProblemSets()
+            .then(() => { lastEnsuredDate = todayKey; })
+            .finally(() => { ensureInProgress = null; });
+    }
+
+    return ensureInProgress;
 };
 
 /**
@@ -458,5 +474,6 @@ module.exports = {
     clearFilteredProblemSet,
     getMonthlyProblemsForRating,
     generateFilteredProblemSets,
+    ensureProblemSetsUpToDate,
     getMonthlyProblems
 };
