@@ -39,7 +39,14 @@ const getMonthlyProblems = async (req, res) => {
         const rating = req.query.rating ? parseInt(req.query.rating) : null;
         
         console.log(`Fetching monthly problems for ${month}/${year}${rating ? ` with rating ${rating}` : ''}`);
-        
+
+        // Generate any missing days first; serve what exists if that fails
+        try {
+            await filteredProblemSetService.ensureProblemSetsUpToDate();
+        } catch (error) {
+            console.error("Error ensuring problem sets are up to date:", error);
+        }
+
         const monthlyProblems = await filteredProblemSetService.getMonthlyProblems(month, year, rating);
         
         if (monthlyProblems.status === "not_found") {

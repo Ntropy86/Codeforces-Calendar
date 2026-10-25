@@ -74,18 +74,42 @@ const createUser = async (userID) => {
 };
 
 /**
+ * Convert a client's local calendar date (YYYY-M-D) into a streak_days key.
+ * The streak follows the user's timezone, so a date is accepted when it is at
+ * most one day away from the server's UTC date (UTC-12 .. UTC+14).
+ * @param {string} localDate - The user's local date
+ * @returns {string|null} - Streak day key, or null if missing or out of range
+ */
+const localDateToStreakKey = (localDate) => {
+    const match = typeof localDate === "string" && localDate.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (!match) {
+        return null;
+    }
+
+    const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+    const now = new Date();
+    const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    if (Math.abs(date.getTime() - todayUTC) > 24 * 60 * 60 * 1000) {
+        return null;
+    }
+
+    return `${date.getUTCFullYear()}-${date.getUTCMonth() + 1}-${date.getUTCDate()}`;
+};
+
+/**
  * Update a specific day's streak status
  * @param {string} userID - The user ID
  * @param {number} day - The day of the month
  * @param {boolean} solved - Whether the day is solved
+ * @param {string} localDate - Optional user's local date (YYYY-M-D), takes precedence over day
  * @returns {Promise} - Promise resolving to updated user
  */
-const updateUserStreakDay = async (userID, day, solved = true) => {
+const updateUserStreakDay = async (userID, day, solved = true, localDate = null) => {
     try {
         const date = new Date();
         const monthDay = day || date.getDate();
         const monthKey = `${date.getFullYear()}-${date.getMonth() + 1}`;
-        const dayKey = `${monthKey}-${monthDay}`;
+        const dayKey = localDateToStreakKey(localDate) || `${monthKey}-${monthDay}`;
         
         // Use dot notation for the update to set a specific day in the Map
         const updateQuery = {};
@@ -146,9 +170,10 @@ const resetUserStreakDays = async (userID) => {
  * @param {string} userID - The user ID
  * @param {number} lastStreakCount - The current streak count
  * @param {boolean} updateDate - Whether to update the last_streak_date (default: false)
+ * @param {string} localDate - Optional user's local date (YYYY-M-D) to mark as solved
  * @returns {Promise} - Promise resolving to updated user
  */
-const updateUserStreak = async (userID, lastStreakCount, updateDate = false) => {
+const updateUserStreak = async (userID, lastStreakCount, updateDate = false, localDate = null) => {
     try {
         const streak_count = parseInt(lastStreakCount);
         
@@ -179,7 +204,7 @@ const updateUserStreak = async (userID, lastStreakCount, updateDate = false) => 
             const year = today.getFullYear();
             const month = today.getMonth() + 1;
             const day = today.getDate();
-            const dayKey = `${year}-${month}-${day}`;
+            const dayKey = localDateToStreakKey(localDate) || `${year}-${month}-${day}`;
             
             updateFields[`streak.streak_days.${dayKey}`] = true;
         }

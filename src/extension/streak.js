@@ -17,8 +17,8 @@ window.streak = {
        return 0;
      }
      
-     // Get today's date in UTC timezone
-     const today = new Date();
+     // Get today's date in the user's local timezone
+     const today = window.dateUtils.now();
      today.setUTCHours(0, 0, 0, 0);
      
      // Extract relevant date parts to create keys
@@ -228,13 +228,9 @@ window.streak = {
   */
  dateFromKey(key) {
    const [year, month, day] = key.split('-').map(num => parseInt(num));
-   // Create date in UTC
-   const date = new Date();
-   date.setUTCFullYear(year);
-   date.setUTCMonth(month - 1); // month is 0-indexed in Date
-   date.setUTCDate(day);
-   date.setUTCHours(0, 0, 0, 0);
-   return date;
+   // Create date in UTC all at once: setting the month on today's date overflows
+   // on the 31st (e.g. "November 31" becomes December 1)
+   return new Date(Date.UTC(year, month - 1, day)); // month is 0-indexed in Date
  },
    
  /**
@@ -287,7 +283,7 @@ window.streak = {
      }
      
      // Calculate the date 3 months ago (in UTC)
-     const threeMonthsAgo = new Date();
+     const threeMonthsAgo = window.dateUtils.now();
      threeMonthsAgo.setUTCMonth(threeMonthsAgo.getUTCMonth() - 3);
      threeMonthsAgo.setUTCHours(0, 0, 0, 0);
      
@@ -342,8 +338,8 @@ window.streak = {
        return false; // No streak to reset
      }
      
-     // Get today's date in UTC
-     const today = new Date();
+     // Get today's date in the user's local timezone
+     const today = window.dateUtils.now();
      today.setUTCHours(0, 0, 0, 0);
      const todayDay = today.getUTCDate();
      
@@ -515,7 +511,7 @@ window.streak = {
      }
      
      // Clean up old streak days periodically
-     const today = new Date();
+     const today = window.dateUtils.now();
      if (today.getUTCDate() === 1) {
        // On the first day of the month, clean up old streak days
        await this.cleanupOldStreakDays(userHandle);
@@ -572,7 +568,7 @@ window.streak = {
      
      // If we have a current last_streak_date, check if that day is marked as false
      if (currentLastStreakDate) {
-       const currentDateKey = this.keyFromDate(currentLastStreakDate);
+       const currentDateKey = this.keyFromDate(window.dateUtils.toLocal(currentLastStreakDate));
        console.log("Current date key:", currentDateKey);
        
        // If the current last_streak_date is marked as false, we need to update it
@@ -598,7 +594,7 @@ window.streak = {
            try {
              const updatedUser = await window.api.updateLastStreakDate(
                userHandle,
-               mostRecentSolvedDay.date.toISOString()
+               window.dateUtils.timestampFromKey(mostRecentSolvedDay.key).toISOString()
              );
              
              console.log("Database last_streak_date updated:", updatedUser);
@@ -639,7 +635,7 @@ window.streak = {
          try {
            const updatedUser = await window.api.updateLastStreakDate(
              userHandle,
-             mostRecentSolvedDay.date.toISOString()
+             window.dateUtils.timestampFromKey(mostRecentSolvedDay.key).toISOString()
            );
            
            console.log("Database last_streak_date updated:", updatedUser);
